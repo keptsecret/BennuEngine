@@ -32,10 +32,13 @@ public:
 			VkImageAspectFlags imageAspect, uint32_t mipLevels, uint32_t baseMipLevel, uint32_t layerCount, uint32_t baseArrayLayer);
 	static void createImageSampler(VkSampler& sampler, VkFilter filter, VkSamplerAddressMode addressMode, bool anisotropic, uint32_t mipLevels);
 
+	static void generateMipmaps(const VkImage& image, const VkExtent3D& extent, VkFormat format, VkImageLayout dstLayout,
+			uint32_t mipLevels, uint32_t baseArrayLayer, uint32_t layerCount);
 	static void transitionImageLayout(const VkImage& image, VkFormat format, VkImageLayout srcLayout, VkImageLayout dstLayout,
 			VkImageAspectFlags imageAspect, uint32_t mipLevels, uint32_t baseMipLevel, uint32_t layerCount, uint32_t baseArrayLayer);
 	static void copyBufferToImage(const VkBuffer& buffer, const VkImage& image, const VkExtent3D& extent, uint32_t layerCount, uint32_t baseArrayLayer);
 
+	static uint32_t getMipLevels(const VkExtent3D& extent);
 	static VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
 
 protected:
@@ -59,7 +62,7 @@ protected:
 
 class Texture2D : public Texture {
 public:
-	Texture2D(VkFormat format = VK_FORMAT_R8G8B8A8_UNORM, VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VkFilter filter = VK_FILTER_LINEAR, VkSamplerAddressMode addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, bool aniso = VK_TRUE);
+	Texture2D(VkFormat format = VK_FORMAT_R8G8B8A8_UNORM, VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VkFilter filter = VK_FILTER_LINEAR, VkSamplerAddressMode addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, bool aniso = VK_TRUE, bool mipmap = VK_TRUE);
 
 	void loadFromFile(const std::string& filename,
 			VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL,
@@ -68,6 +71,7 @@ public:
 
 private:
 	bool anisotropic;
+	bool mipmap;
 };
 
 class TextureDepth : public Texture {
