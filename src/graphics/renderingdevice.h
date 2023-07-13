@@ -55,6 +55,10 @@ private:
 	void createDescriptorSets();
 
 	static void windowResizeCallback(GLFWwindow* window, int width, int height);
+	void updateWindowDimensions() {
+		width = vulkanContext.swapChain.width;
+		height = vulkanContext.swapChain.height;
+	}
 
 private:
 	uint32_t width = 800;

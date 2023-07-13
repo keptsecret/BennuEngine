@@ -33,6 +33,7 @@ void RenderingDevice::initialize() {
 	createCommandPool();
 
 	vulkanContext.updateSwapchain(window);
+	updateWindowDimensions();
 
 	createRenderPipeline();
 	createCommandBuffers();
@@ -453,6 +454,7 @@ void RenderingDevice::draw() {
 	VkResult err = vulkanContext.swapChain.acquireNextImage(presentCompleteSemaphores[frameIndex], &currentBuffer);
 	if (err == VK_ERROR_OUT_OF_DATE_KHR) {
 		vulkanContext.updateSwapchain(window);
+		updateWindowDimensions();
 		return;
 	} else if (err != VK_SUCCESS && err != VK_SUBOPTIMAL_KHR) {
 		CHECK_VKRESULT(err);
@@ -492,6 +494,7 @@ void RenderingDevice::draw() {
 	err = vkQueuePresentKHR(vulkanContext.presentQueue, &presentInfo);
 	if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR || windowResized) {
 		vulkanContext.updateSwapchain(window);
+		updateWindowDimensions();
 		windowResized = false;
 	} else if (err != VK_SUCCESS) {
 		CHECK_VKRESULT(err);
