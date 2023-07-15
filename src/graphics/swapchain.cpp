@@ -88,14 +88,13 @@ void Swapchain::update(GLFWwindow *window) {
 	}
 
 	// Create images
-	uint32_t swapchainImageCount;
-	vkGetSwapchainImagesKHR(device, swapchain, &swapchainImageCount, nullptr);
-	swapchainImages.resize(swapchainImageCount);
-	vkGetSwapchainImagesKHR(device, swapchain, &swapchainImageCount, swapchainImages.data());
+	vkGetSwapchainImagesKHR(device, swapchain, &imageCount, nullptr);
+	swapchainImages.resize(imageCount);
+	vkGetSwapchainImagesKHR(device, swapchain, &imageCount, swapchainImages.data());
 
 	// Create image views
-	swapchainImageViews.resize(swapchainImageCount);
-	for (uint32_t i = 0; i < swapchainImageCount; i++) {
+	swapchainImageViews.resize(imageCount);
+	for (uint32_t i = 0; i < imageCount; i++) {
 		VkImageViewCreateInfo viewCreateInfo{
 			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 			.image = swapchainImages[i],
@@ -121,38 +120,6 @@ void Swapchain::update(GLFWwindow *window) {
 			throw std::runtime_error("ERROR::Swapchain:update: failed to create image views!");
 		}
 	}
-
-	// TODO: temporary
-	TextureDepth* depth = new TextureDepth({ width, height }, VK_SAMPLE_COUNT_1_BIT);
-	depthTexture = std::unique_ptr<TextureDepth>(depth);
-}
-
-void Swapchain::setupFramebuffers(VkRenderPass renderPass) {
-	uint32_t framebufferCount = swapchainImageViews.size();
-	framebuffers.resize(framebufferCount);
-
-	VkResult err;
-	for (uint32_t i = 0; i < framebufferCount; i++) {
-		std::array<VkImageView, 2> attachments{
-			swapchainImageViews[i],
-			depthTexture->getImageView()
-		};
-
-		VkFramebufferCreateInfo framebufferCreateInfo{
-			.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-			.renderPass = renderPass,
-			.attachmentCount = attachments.size(),
-			.pAttachments = attachments.data(),
-			.width = width,
-			.height = height,
-			.layers = 1
-		};
-
-		err = vkCreateFramebuffer(device, &framebufferCreateInfo, nullptr, &framebuffers[i]);
-		if (err != VK_SUCCESS) {
-			throw std::runtime_error("ERROR::RenderingDevice:setupFramebuffers: failed to create graphics pipeline!");
-		}
-	}
 }
 
 VkResult Swapchain::acquireNextImage(VkSemaphore presentCompleteSemaphore, uint32_t* imageIndex) {
@@ -160,12 +127,6 @@ VkResult Swapchain::acquireNextImage(VkSemaphore presentCompleteSemaphore, uint3
 }
 
 void Swapchain::cleanup() {
-	depthTexture.reset();
-
-	for (auto& framebuffer : framebuffers) {
-		vkDestroyFramebuffer(device, framebuffer, nullptr);
-	}
-
 	for (auto& imageView : swapchainImageViews) {
 		vkDestroyImageView(device, imageView, nullptr);
 	}

@@ -20,7 +20,7 @@ public:
 	void connect(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device);
 	void initialize(VkInstance instance, GLFWwindow* window);
 	void update(GLFWwindow* window);
-	void setupFramebuffers(VkRenderPass renderPass);
+
 	VkResult acquireNextImage(VkSemaphore presentCompleteSemaphore, uint32_t* imageIndex);
 	void cleanup();
 
@@ -32,6 +32,7 @@ private:
 	uint32_t height = 0;
 	VkFormat colorFormat;
 	VkColorSpaceKHR colorSpace;
+	uint32_t imageCount = 0;
 
 	VkInstance instance = VK_NULL_HANDLE;
 	VkDevice device = VK_NULL_HANDLE;
@@ -40,10 +41,6 @@ private:
 	VkSwapchainKHR swapchain = VK_NULL_HANDLE;
 	std::vector<VkImage> swapchainImages;
 	std::vector<VkImageView> swapchainImageViews;
-	std::vector<VkFramebuffer> framebuffers;
-
-	// TODO: review placement of depth attachment
-	std::unique_ptr<TextureDepth> depthTexture;
 };
 
 }  // namespace vkw

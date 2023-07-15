@@ -32,8 +32,7 @@ void RenderingDevice::initialize() {
 	setupDescriptorSetLayout();
 	createCommandPool();
 
-	vulkanContext.updateSwapchain(window);
-	updateWindowDimensions();
+	updateRenderArea();
 
 	createRenderPipeline();
 	createCommandBuffers();
@@ -139,7 +138,7 @@ void RenderingDevice::createRenderPipeline() {
 
 	VkPipelineMultisampleStateCreateInfo multisampleState{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-		.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+		.rasterizationSamples = msaaSamples,
 		.sampleShadingEnable = VK_FALSE
 	};
 
@@ -190,7 +189,7 @@ void RenderingDevice::createRenderPipeline() {
 		.pColorBlendState = &colorBlendState,
 		.pDynamicState = &dynamicState,
 		.layout = pipelineLayout,
-		.renderPass = vulkanContext.renderPass,
+		.renderPass = renderPass,
 		.subpass = 0,
 		.basePipelineHandle = VK_NULL_HANDLE,
 		.basePipelineIndex = -1
@@ -237,8 +236,8 @@ void RenderingDevice::buildCommandBuffer() {
 
 	VkRenderPassBeginInfo renderPassBeginInfo{
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-		.renderPass = vulkanContext.renderPass,
-		.framebuffer = vulkanContext.swapChain.framebuffers[currentBuffer],
+		.renderPass = renderPass,
+		.framebuffer = framebuffers[currentBuffer],
 		.renderArea = {
 				.offset = { 0, 0 },
 				.extent = {
@@ -446,6 +445,155 @@ void RenderingDevice::updateUniformBuffers() {
 	uniformBuffers[frameIndex].update(&mvp);
 }
 
+void RenderingDevice::updateRenderArea() {
+	vkDeviceWaitIdle(vulkanContext.device);
+
+	cleanupRenderArea();
+
+	vulkanContext.updateSwapchain(window);
+
+	width = vulkanContext.swapChain.width;
+	height = vulkanContext.swapChain.height;
+
+	// TODO: temporary
+	Texture2D* color = new Texture2D({ width, height }, vulkanContext.swapChain.colorFormat, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_FILTER_LINEAR,
+			VK_SAMPLER_ADDRESS_MODE_REPEAT, msaaSamples);
+	colorTexture = std::unique_ptr<Texture2D>(color);
+
+	TextureDepth* depth = new TextureDepth({ width, height }, msaaSamples);
+	depthTexture = std::unique_ptr<TextureDepth>(depth);
+
+	setupRenderPass();
+	setupFramebuffers(renderPass);
+}
+
+void RenderingDevice::setupRenderPass() {
+	VkAttachmentDescription colorAttachment{
+		.format = vulkanContext.swapChain.colorFormat,
+		.samples = msaaSamples,
+		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+		.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+		.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+		.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+	};
+
+	VkAttachmentReference colorAttachmentRef{
+		.attachment = 0,
+		.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+	};
+
+	VkAttachmentDescription depthAttachment{
+		.format = depthTexture->getFormat(),
+		.samples = msaaSamples,
+		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+		.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+		.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+		.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+		.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+	};
+
+	VkAttachmentReference depthAttachmentRef{
+		.attachment = 1,
+		.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+	};
+
+	VkAttachmentDescription colorAttachmentResolve{
+		.format = vulkanContext.swapChain.colorFormat,
+		.samples = VK_SAMPLE_COUNT_1_BIT,
+		.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+		.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+		.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+		.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+	};
+
+	VkAttachmentReference colorAttachmentResolveRef{
+		.attachment = 2,
+		.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+	};
+
+	VkSubpassDescription subpass{
+		.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+		.colorAttachmentCount = 1,
+		.pColorAttachments = &colorAttachmentRef,
+		.pResolveAttachments = &colorAttachmentResolveRef,
+		.pDepthStencilAttachment = &depthAttachmentRef
+	};
+
+	VkSubpassDependency dependency{
+		.srcSubpass = VK_SUBPASS_EXTERNAL,
+		.dstSubpass = 0,
+		.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+		.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+		.srcAccessMask = 0,
+		.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+	};
+
+	std::array<VkAttachmentDescription, 3> attachments{colorAttachment, depthAttachment, colorAttachmentResolve};
+
+	VkRenderPassCreateInfo renderPassCreateInfo{
+		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+		.attachmentCount = attachments.size(),
+		.pAttachments = attachments.data(),
+		.subpassCount = 1,
+		.pSubpasses = &subpass,
+		.dependencyCount = 1,
+		.pDependencies = &dependency
+	};
+
+	CHECK_VKRESULT(vkCreateRenderPass(vulkanContext.device, &renderPassCreateInfo, nullptr, &renderPass));
+}
+
+void RenderingDevice::setupFramebuffers(VkRenderPass renderPass) {
+	uint32_t framebufferCount = vulkanContext.swapChain.imageCount;
+	framebuffers.resize(framebufferCount);
+
+	VkResult err;
+	for (uint32_t i = 0; i < framebufferCount; i++) {
+		std::array<VkImageView, 3> attachments{
+			colorTexture->getImageView(),
+			depthTexture->getImageView(),
+			vulkanContext.swapChain.swapchainImageViews[i]
+		};
+
+		VkFramebufferCreateInfo framebufferCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+			.renderPass = renderPass,
+			.attachmentCount = attachments.size(),
+			.pAttachments = attachments.data(),
+			.width = width,
+			.height = height,
+			.layers = 1
+		};
+
+		err = vkCreateFramebuffer(vulkanContext.device, &framebufferCreateInfo, nullptr, &framebuffers[i]);
+		if (err != VK_SUCCESS) {
+			throw std::runtime_error("ERROR::RenderingDevice:setupFramebuffers: failed to create graphics pipeline!");
+		}
+	}
+}
+
+void RenderingDevice::cleanupRenderArea() {
+	if (colorTexture) {
+		colorTexture.reset();
+	}
+
+	if (depthTexture) {
+		depthTexture.reset();
+	}
+
+	for (auto& framebuffer : framebuffers) {
+		vkDestroyFramebuffer(vulkanContext.device, framebuffer, nullptr);
+	}
+
+	vkDestroyRenderPass(vulkanContext.device, renderPass, nullptr);
+}
+
 void RenderingDevice::render() {
 	draw();
 }
@@ -453,8 +601,7 @@ void RenderingDevice::render() {
 void RenderingDevice::draw() {
 	VkResult err = vulkanContext.swapChain.acquireNextImage(presentCompleteSemaphores[frameIndex], &currentBuffer);
 	if (err == VK_ERROR_OUT_OF_DATE_KHR) {
-		vulkanContext.updateSwapchain(window);
-		updateWindowDimensions();
+		updateRenderArea();
 		return;
 	} else if (err != VK_SUCCESS && err != VK_SUBOPTIMAL_KHR) {
 		CHECK_VKRESULT(err);
@@ -493,8 +640,7 @@ void RenderingDevice::draw() {
 
 	err = vkQueuePresentKHR(vulkanContext.presentQueue, &presentInfo);
 	if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR || windowResized) {
-		vulkanContext.updateSwapchain(window);
-		updateWindowDimensions();
+		updateRenderArea();
 		windowResized = false;
 	} else if (err != VK_SUCCESS) {
 		CHECK_VKRESULT(err);
@@ -506,6 +652,8 @@ void RenderingDevice::draw() {
 
 RenderingDevice::~RenderingDevice() {
 	vkDeviceWaitIdle(vulkanContext.device);
+
+	cleanupRenderArea();
 
 	vkDestroyDescriptorPool(vulkanContext.device, descriptorPool, nullptr);
 	for (int i = 0; i < descriptorSetLayouts.size(); i++) {

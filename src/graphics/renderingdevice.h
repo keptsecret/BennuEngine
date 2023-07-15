@@ -49,16 +49,20 @@ private:
 	void draw();
 	void updateUniformBuffers();
 
+	// TODO: place into same class?
+	void updateRenderArea();
+	void setupFramebuffers(VkRenderPass renderPass);
+	void cleanupRenderArea();
+
 	VkPipelineShaderStageCreateInfo loadSPIRVShader(const std::string& filename, VkShaderStageFlagBits stage);
 
 	void createDescriptorPool();
 	void createDescriptorSets();
 
 	static void windowResizeCallback(GLFWwindow* window, int width, int height);
-	void updateWindowDimensions() {
-		width = vulkanContext.swapChain.width;
-		height = vulkanContext.swapChain.height;
-	}
+
+	// TODO: review placement
+	void setupRenderPass();
 
 private:
 	uint32_t width = 800;
@@ -68,10 +72,12 @@ private:
 
 	GLFWwindow* window;
 	VulkanContext vulkanContext;
+	std::vector<VkFramebuffer> framebuffers;
 
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 	VkPipelineLayout pipelineLayout;
 	std::vector<VkShaderModule> shaderModules;
+	VkRenderPass renderPass;
 	VkPipeline renderPipeline;
 	VkCommandPool commandPool;
 	std::vector<VkCommandBuffer> commandBuffers;
@@ -87,6 +93,12 @@ private:
 	std::vector<UniformBuffer> uniformBuffers;
 	VkDescriptorPool descriptorPool;
 	std::vector<VkDescriptorSet> descriptorSets;
+
+	// TODO: review placement of attachments
+	std::unique_ptr<Texture2D> colorTexture;
+	std::unique_ptr<TextureDepth> depthTexture;
+
+	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_8_BIT;
 };
 
 }  // namespace vkw

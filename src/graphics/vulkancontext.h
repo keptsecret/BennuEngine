@@ -57,7 +57,6 @@ private:
 	Swapchain swapChain;
 	VkQueue graphicsQueue = VK_NULL_HANDLE;
 	VkQueue presentQueue = VK_NULL_HANDLE;
-	VkRenderPass renderPass;
 
 	VkDebugUtilsMessengerEXT debugMessenger;
 	PFN_vkCreateDebugUtilsMessengerEXT CreateUtilsDebugMessengerEXT = nullptr;

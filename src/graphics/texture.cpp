@@ -8,7 +8,7 @@ namespace bennu {
 
 namespace vkw {
 
-void Texture::createImage(VkImage& image, VkDeviceMemory& memory, const VkExtent3D& extent, VkFormat format,
+void Texture::createImage(VkImage& image, VkDeviceMemory& memory, const VkExtent3D& extent, VkFormat format, VkSampleCountFlagBits samples,
 		VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, uint32_t mipLevels, uint32_t arrayLayers, VkImageType imageType) {
 	RenderingDevice* rd = RenderingDevice::getSingleton();
 	VkDevice device = rd->getDevice();
@@ -20,7 +20,7 @@ void Texture::createImage(VkImage& image, VkDeviceMemory& memory, const VkExtent
 		.extent = extent,
 		.mipLevels = mipLevels,
 		.arrayLayers = arrayLayers,
-		.samples = VK_SAMPLE_COUNT_1_BIT,
+		.samples = samples,
 		.tiling = tiling,
 		.usage = usage,
 		.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
@@ -208,6 +208,12 @@ void Texture::transitionImageLayout(const VkImage& img, VkFormat format, VkImage
 
 		srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	} else if (srcLayout == VK_IMAGE_LAYOUT_UNDEFINED && dstLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+		barrier.srcAccessMask = 0;
+		barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+		srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		dstStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 	} else if (srcLayout == VK_IMAGE_LAYOUT_UNDEFINED && dstLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
 		barrier.srcAccessMask = 0;
 		barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
@@ -285,8 +291,8 @@ VkWriteDescriptorSet Texture::getWriteDescriptor(uint32_t binding, VkDescriptorT
 	return writeDescriptorSet;
 }
 
-Texture::Texture(VkFormat format, VkImageLayout layout, uint32_t mipLevels, uint32_t arrayCount, VkFilter filter, VkSamplerAddressMode addressMode) :
-		format(format), layout(layout), mipLevels(mipLevels), arrayCount(arrayCount), filter(filter), addressMode(addressMode) {}
+Texture::Texture(VkFormat format, VkImageLayout layout, VkImageUsageFlags usage, VkFilter filter, VkSamplerAddressMode addressMode, VkSampleCountFlagBits samples, uint32_t mipLevels, uint32_t arrayCount) :
+		format(format), layout(layout), usage(usage), filter(filter), addressMode(addressMode), samples(samples), mipLevels(mipLevels), arrayCount(arrayCount) {}
 
 Texture::~Texture() {
 	VkDevice device = RenderingDevice::getSingleton()->getDevice();
@@ -312,11 +318,24 @@ bool Texture::hasStencil(VkFormat format) {
 	return std::find(STENCIL_FORMATS.begin(), STENCIL_FORMATS.end(), format) != std::end(STENCIL_FORMATS);
 }
 
-Texture2D::Texture2D(VkFormat format, VkImageLayout layout, VkFilter filter, VkSamplerAddressMode addressMode, bool aniso, bool mipmap) :
-		Texture(format, layout, 1, 1, filter, addressMode), anisotropic(aniso), mipmap(mipmap) {
+Texture2D::Texture2D(const std::string& filename, VkFilter filter, VkSamplerAddressMode addressMode, bool aniso, bool mipmap) :
+		Texture(VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+				filter, addressMode, VK_SAMPLE_COUNT_1_BIT, 1, 1), anisotropic(aniso), mipmap(mipmap) {
+	loadFromFile(filename);
 }
 
-void Texture2D::loadFromFile(const std::string& filename, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties) {
+Texture2D::Texture2D(const glm::ivec2& extent, VkFormat format, VkImageLayout layout,
+		VkImageUsageFlags usage, VkFilter filter, VkSamplerAddressMode addressMode,
+		VkSampleCountFlagBits samples, bool aniso, bool mipmap) :
+		Texture(format, layout, usage | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+				filter, addressMode, samples, 1, 1), anisotropic(aniso), mipmap(mipmap) {
+	this->extent = {(uint32_t)extent.x, (uint32_t)extent.y, 1};
+	initialize();
+	transitionImageLayout(image, format, VK_IMAGE_LAYOUT_UNDEFINED, layout, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels, 0, arrayCount, 0);
+}
+
+void Texture2D::loadFromFile(const std::string& filename) {
 	int width, height, channels;
 	unsigned char* pixels = stbi_load(filename.c_str(), &width, &height, &channels, STBI_rgb_alpha);
 	if (!pixels) {
@@ -330,17 +349,10 @@ void Texture2D::loadFromFile(const std::string& filename, VkImageTiling tiling, 
 	VkDeviceSize textureSize = width * height * 4;
 	extent = { (uint32_t)width, (uint32_t)height, 1 };
 
-	mipLevels = mipmap ? getMipLevels(extent) : 1;
-
 	Buffer stagingBuffer(textureSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, pixels);
 	stbi_image_free(pixels);
 
-	this->usage = usage;
-
-	createImage(image, deviceMemory, extent, format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mipLevels, arrayCount, VK_IMAGE_TYPE_2D);
-	createImageSampler(sampler, filter, addressMode, anisotropic, mipLevels);
-	createImageView(imageView, image, VK_IMAGE_VIEW_TYPE_2D, format, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels, 0, arrayCount, 0);
+	initialize();
 
 	transitionImageLayout(image, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels, 0, arrayCount, 0);
 	copyBufferToImage(stagingBuffer.getBuffer(), image, extent, 1, 0);
@@ -352,6 +364,15 @@ void Texture2D::loadFromFile(const std::string& filename, VkImageTiling tiling, 
 	}
 }
 
+void Texture2D::initialize() {
+	mipLevels = mipmap ? getMipLevels(extent) : 1;
+
+	createImage(image, deviceMemory, extent, format, samples, VK_IMAGE_TILING_OPTIMAL, usage,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, mipLevels, arrayCount, VK_IMAGE_TYPE_2D);
+	createImageSampler(sampler, filter, addressMode, anisotropic, mipLevels);
+	createImageView(imageView, image, VK_IMAGE_VIEW_TYPE_2D, format, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels, 0, arrayCount, 0);
+}
+
 // depth formats in order of importance
 static const std::vector<VkFormat> DEPTH_FORMATS = {
 	VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D16_UNORM_S8_UINT,
@@ -360,7 +381,8 @@ static const std::vector<VkFormat> DEPTH_FORMATS = {
 
 TextureDepth::TextureDepth(const glm::ivec2& extent, VkSampleCountFlagBits samples) :
 		Texture(findSupportedFormat(DEPTH_FORMATS, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-				1, 1, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE) {
+				VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, samples,
+				1, 1) {
 	this->extent = { (uint32_t)extent.x, (uint32_t)extent.y, 1 };
 
 	if (format == VK_FORMAT_UNDEFINED) {
@@ -372,7 +394,7 @@ TextureDepth::TextureDepth(const glm::ivec2& extent, VkSampleCountFlagBits sampl
 		aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 	}
 
-	createImage(image, deviceMemory, this->extent, format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+	createImage(image, deviceMemory, this->extent, format, samples, VK_IMAGE_TILING_OPTIMAL, usage,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 1, 1, VK_IMAGE_TYPE_2D);
 	createImageSampler(sampler, filter, addressMode, false, mipLevels);
 	createImageView(imageView, image, VK_IMAGE_VIEW_TYPE_2D, format, VK_IMAGE_ASPECT_DEPTH_BIT, 1, 0, 1, 0);

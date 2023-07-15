@@ -239,8 +239,7 @@ std::shared_ptr<Texture> Model::loadTexture(const aiMaterial* mat, aiTextureType
 	if (!foundLoaded) {
 		texture = std::make_shared<Texture>();
 		texture->filepath = filepath.C_Str();
-		vkw::Texture2D* textureObject = new vkw::Texture2D();	///< assume they're all 2D textures, probably is
-		textureObject->loadFromFile(path + '/' + filepath.C_Str());
+		vkw::Texture2D* textureObject = new vkw::Texture2D(path + '/' + filepath.C_Str());	///< assume they're all 2D textures, probably is
 		texture->texture = std::unique_ptr<vkw::Texture>(textureObject);
 	}
 
