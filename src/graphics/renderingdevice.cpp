@@ -1,13 +1,10 @@
 #include <graphics/renderingdevice.h>
 
-#define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 
 #include <graphics/utilities.h>
-
-#include <chrono>
-#include <glm/gtc/matrix_transform.hpp>
+#include <core/engine.h>
 
 namespace bennu {
 
@@ -431,15 +428,12 @@ void RenderingDevice::windowResizeCallback(GLFWwindow* window, int width, int he
 }
 
 void RenderingDevice::updateUniformBuffers() {
-	static auto startTime = std::chrono::high_resolution_clock::now();
-
-	auto currentTime = std::chrono::high_resolution_clock::now();
-	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+	Engine* e = Engine::getSingleton();
 
 	MVP mvp{
-		.model = glm::rotate(glm::mat4(1.f), time * glm::radians(90.f), glm::vec3(0.f, 0.f, 1.f)),
-		.view = glm::lookAt(glm::vec3(2.f, 2.f, 2.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 0.f, 1.f)),
-		.projection = glm::perspective(glm::radians(45.f), (float)width / (float)height, 0.1f, 10.f)
+		.model = glm::mat4(1.f),
+		.view = e->getCamera()->getViewTransform(),
+		.projection = e->getCamera()->getProjectionTransform()
 	};
 	mvp.projection[1][1] *= -1;	 // invert y coordinates
 	uniformBuffers[frameIndex].update(&mvp);
@@ -466,6 +460,8 @@ void RenderingDevice::updateRenderArea() {
 
 	setupRenderPass();
 	setupFramebuffers(renderPass);
+
+	Engine::getSingleton()->getCamera()->updateViewportSize(width, height);
 }
 
 void RenderingDevice::setupRenderPass() {

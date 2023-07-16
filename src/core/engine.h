@@ -3,9 +3,9 @@
 
 #define GLFW_INCLUDE_VULKAN
 #include <glfw/glfw3.h>
-#include <graphics/vulkancontext.h>
 
-#include <memory>
+#include <scene/camera.h>
+#include <core/inputmanager.h>
 
 namespace bennu {
 
@@ -24,11 +24,16 @@ public:
 		renderLoop();
 	}
 
+	Camera* getCamera() { return &viewCamera; }
+	InputManager* getInputManager() { return &inputManager; }
+
 private:
 	void initialize();
 	void renderLoop();
 
-	std::unique_ptr<vkw::VulkanContext> context = nullptr;
+	Camera viewCamera;
+	InputManager inputManager;
+
 	bool useValidationLayers = true;
 };
 

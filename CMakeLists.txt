@@ -99,10 +99,12 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/external)
 
 set(BENNU_CORE_HEADERS
         src/core/engine.h
+        src/core/inputmanager.h
         )
 
 set(BENNU_CORE_SOURCE
         src/core/engine.cpp
+        src/core/inputmanager.cpp
         )
 
 set(BENNU_GRAPHICS_HEADERS
@@ -125,10 +127,12 @@ set(BENNU_GRAPHICS_SOURCE
 
 set(BENNU_SCENE_HEADERS
         src/scene/model.h
+        src/scene/camera.h
         )
 
 set(BENNU_SCENE_SOURCE
         src/scene/model.cpp
+        src/scene/camera.cpp
         )
 
 add_library(bennu_lib STATIC
