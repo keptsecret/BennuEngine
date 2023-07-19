@@ -113,6 +113,7 @@ set(BENNU_GRAPHICS_HEADERS
         src/graphics/swapchain.h
         src/graphics/buffer.h
         src/graphics/texture.h
+        src/graphics/framebuffer.h
         src/graphics/utilities.h
         )
 
@@ -122,6 +123,7 @@ set(BENNU_GRAPHICS_SOURCE
         src/graphics/swapchain.cpp
         src/graphics/buffer.cpp
         src/graphics/texture.cpp
+        src/graphics/framebuffer.cpp
         src/graphics/utilities.cpp
         )
 

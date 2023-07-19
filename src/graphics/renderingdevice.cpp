@@ -234,7 +234,7 @@ void RenderingDevice::buildCommandBuffer() {
 	VkRenderPassBeginInfo renderPassBeginInfo{
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
 		.renderPass = renderPass,
-		.framebuffer = framebuffers[currentBuffer],
+		.framebuffer = renderTargets[currentBuffer].getFramebuffer(),
 		.renderArea = {
 				.offset = { 0, 0 },
 				.extent = {
@@ -450,75 +450,43 @@ void RenderingDevice::updateRenderArea() {
 	height = vulkanContext.swapChain.height;
 
 	// TODO: temporary
-	Texture2D* color = new Texture2D({ width, height }, vulkanContext.swapChain.colorFormat, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_FILTER_LINEAR,
-			VK_SAMPLER_ADDRESS_MODE_REPEAT, msaaSamples);
-	colorTexture = std::unique_ptr<Texture2D>(color);
+	uint32_t targetsCount = vulkanContext.swapChain.imageCount;
+	renderTargets.resize(targetsCount);
 
-	TextureDepth* depth = new TextureDepth({ width, height }, msaaSamples);
-	depthTexture = std::unique_ptr<TextureDepth>(depth);
+	for (uint32_t i = 0; i < targetsCount; i++) {
+		Texture2D* color = new Texture2D({ width, height }, vulkanContext.swapChain.colorFormat, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_FILTER_LINEAR,
+				VK_SAMPLER_ADDRESS_MODE_REPEAT, msaaSamples);
+
+		AttachmentInfo attachment{ color };
+		renderTargets[i].addColorAttachment(attachment);
+
+		TextureDepth* depth = new TextureDepth({ width, height }, msaaSamples);
+
+		attachment = AttachmentInfo{ depth };
+		renderTargets[i].setDepthStencilAttachment(attachment);
+
+		attachment = AttachmentInfo{ vulkanContext.swapChain.swapchainImages[i],
+			vulkanContext.swapChain.swapchainImageViews[i], vulkanContext.swapChain.colorFormat };
+		renderTargets[i].addColorResolveAttachment(attachment);
+	}
 
 	setupRenderPass();
-	setupFramebuffers(renderPass);
+
+	for (uint32_t i = 0; i < targetsCount; i++) {
+		renderTargets[i].setupFramebuffer({width, height}, renderPass);
+	}
 
 	Engine::getSingleton()->getCamera()->updateViewportSize(width, height);
 }
 
 void RenderingDevice::setupRenderPass() {
-	VkAttachmentDescription colorAttachment{
-		.format = vulkanContext.swapChain.colorFormat,
-		.samples = msaaSamples,
-		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-		.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-		.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-		.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-	};
-
-	VkAttachmentReference colorAttachmentRef{
-		.attachment = 0,
-		.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-	};
-
-	VkAttachmentDescription depthAttachment{
-		.format = depthTexture->getFormat(),
-		.samples = msaaSamples,
-		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-		.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-		.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-		.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-		.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-	};
-
-	VkAttachmentReference depthAttachmentRef{
-		.attachment = 1,
-		.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-	};
-
-	VkAttachmentDescription colorAttachmentResolve{
-		.format = vulkanContext.swapChain.colorFormat,
-		.samples = VK_SAMPLE_COUNT_1_BIT,
-		.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-		.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-		.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-		.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-	};
-
-	VkAttachmentReference colorAttachmentResolveRef{
-		.attachment = 2,
-		.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-	};
-
 	VkSubpassDescription subpass{
 		.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-		.colorAttachmentCount = 1,
-		.pColorAttachments = &colorAttachmentRef,
-		.pResolveAttachments = &colorAttachmentResolveRef,
-		.pDepthStencilAttachment = &depthAttachmentRef
+		.colorAttachmentCount = renderTargets[0].getNumColorAttachments(),
+		.pColorAttachments = renderTargets[0].getColorAttachmentReferences(),
+		.pResolveAttachments = renderTargets[0].getResolveAttachmentReferences(),
+		.pDepthStencilAttachment = renderTargets[0].getDepthStencilReference()
 	};
 
 	VkSubpassDependency dependency{
@@ -530,12 +498,10 @@ void RenderingDevice::setupRenderPass() {
 		.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
 	};
 
-	std::array<VkAttachmentDescription, 3> attachments{colorAttachment, depthAttachment, colorAttachmentResolve};
-
 	VkRenderPassCreateInfo renderPassCreateInfo{
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-		.attachmentCount = attachments.size(),
-		.pAttachments = attachments.data(),
+		.attachmentCount = renderTargets[0].getNumAttachmentDescriptions(),
+		.pAttachments = renderTargets[0].getAttachmentDescriptions(),
 		.subpassCount = 1,
 		.pSubpasses = &subpass,
 		.dependencyCount = 1,
@@ -545,46 +511,9 @@ void RenderingDevice::setupRenderPass() {
 	CHECK_VKRESULT(vkCreateRenderPass(vulkanContext.device, &renderPassCreateInfo, nullptr, &renderPass));
 }
 
-void RenderingDevice::setupFramebuffers(VkRenderPass renderPass) {
-	uint32_t framebufferCount = vulkanContext.swapChain.imageCount;
-	framebuffers.resize(framebufferCount);
-
-	VkResult err;
-	for (uint32_t i = 0; i < framebufferCount; i++) {
-		std::array<VkImageView, 3> attachments{
-			colorTexture->getImageView(),
-			depthTexture->getImageView(),
-			vulkanContext.swapChain.swapchainImageViews[i]
-		};
-
-		VkFramebufferCreateInfo framebufferCreateInfo{
-			.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-			.renderPass = renderPass,
-			.attachmentCount = attachments.size(),
-			.pAttachments = attachments.data(),
-			.width = width,
-			.height = height,
-			.layers = 1
-		};
-
-		err = vkCreateFramebuffer(vulkanContext.device, &framebufferCreateInfo, nullptr, &framebuffers[i]);
-		if (err != VK_SUCCESS) {
-			throw std::runtime_error("ERROR::RenderingDevice:setupFramebuffers: failed to create graphics pipeline!");
-		}
-	}
-}
-
 void RenderingDevice::cleanupRenderArea() {
-	if (colorTexture) {
-		colorTexture.reset();
-	}
-
-	if (depthTexture) {
-		depthTexture.reset();
-	}
-
-	for (auto& framebuffer : framebuffers) {
-		vkDestroyFramebuffer(vulkanContext.device, framebuffer, nullptr);
+	for (auto& target : renderTargets) {
+		target.destroy();
 	}
 
 	vkDestroyRenderPass(vulkanContext.device, renderPass, nullptr);

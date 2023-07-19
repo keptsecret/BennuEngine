@@ -3,6 +3,7 @@
 
 #include <glfw/glfw3.h>
 #include <graphics/buffer.h>
+#include <graphics/framebuffer.h>
 #include <graphics/vulkancontext.h>
 #include <scene/model.h>
 
@@ -51,7 +52,6 @@ private:
 
 	// TODO: place into same class?
 	void updateRenderArea();
-	void setupFramebuffers(VkRenderPass renderPass);
 	void cleanupRenderArea();
 
 	VkPipelineShaderStageCreateInfo loadSPIRVShader(const std::string& filename, VkShaderStageFlagBits stage);
@@ -72,7 +72,7 @@ private:
 
 	GLFWwindow* window;
 	VulkanContext vulkanContext;
-	std::vector<VkFramebuffer> framebuffers;
+	std::vector<RenderTarget> renderTargets;
 
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 	VkPipelineLayout pipelineLayout;
@@ -93,10 +93,6 @@ private:
 	std::vector<UniformBuffer> uniformBuffers;
 	VkDescriptorPool descriptorPool;
 	std::vector<VkDescriptorSet> descriptorSets;
-
-	// TODO: review placement of attachments
-	std::unique_ptr<Texture2D> colorTexture;
-	std::unique_ptr<TextureDepth> depthTexture;
 
 	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_8_BIT;
 };

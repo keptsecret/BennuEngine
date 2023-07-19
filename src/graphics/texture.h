@@ -15,10 +15,13 @@ class Texture {
 public:
 	~Texture();
 
+	const VkImage& getImage() const { return image; }
 	const VkImageView& getImageView() const { return imageView; }
 	const VkSampler& getSampler() const { return sampler; }
 	VkImageLayout getLayout() const { return layout; }
+
 	VkFormat getFormat() const { return format; }
+	VkSampleCountFlagBits getSamples() const { return samples; }
 
 	static bool hasDepth(VkFormat format);
 	static bool hasStencil(VkFormat format);
