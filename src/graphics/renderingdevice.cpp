@@ -234,7 +234,7 @@ void RenderingDevice::buildCommandBuffer() {
 	VkRenderPassBeginInfo renderPassBeginInfo{
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
 		.renderPass = renderPass,
-		.framebuffer = renderTargets[currentBuffer].getFramebuffer(),
+		.framebuffer = renderTarget.getFramebuffer(currentBuffer),
 		.renderArea = {
 				.offset = { 0, 0 },
 				.extent = {
@@ -449,33 +449,25 @@ void RenderingDevice::updateRenderArea() {
 	width = vulkanContext.swapChain.width;
 	height = vulkanContext.swapChain.height;
 
-	// TODO: temporary
-	uint32_t targetsCount = vulkanContext.swapChain.imageCount;
-	renderTargets.resize(targetsCount);
+	Texture2D* color = new Texture2D({ width, height }, vulkanContext.swapChain.colorFormat, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_FILTER_LINEAR,
+			VK_SAMPLER_ADDRESS_MODE_REPEAT, msaaSamples);
 
-	for (uint32_t i = 0; i < targetsCount; i++) {
-		Texture2D* color = new Texture2D({ width, height }, vulkanContext.swapChain.colorFormat, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_FILTER_LINEAR,
-				VK_SAMPLER_ADDRESS_MODE_REPEAT, msaaSamples);
+	AttachmentInfo attachment{ color };
+	renderTarget.addColorAttachment(attachment);
 
-		AttachmentInfo attachment{ color };
-		renderTargets[i].addColorAttachment(attachment);
+	TextureDepth* depth = new TextureDepth({ width, height }, msaaSamples);
 
-		TextureDepth* depth = new TextureDepth({ width, height }, msaaSamples);
+	attachment = AttachmentInfo{ depth };
+	renderTarget.setDepthStencilAttachment(attachment);
 
-		attachment = AttachmentInfo{ depth };
-		renderTargets[i].setDepthStencilAttachment(attachment);
-
-		attachment = AttachmentInfo{ vulkanContext.swapChain.swapchainImages[i],
-			vulkanContext.swapChain.swapchainImageViews[i], vulkanContext.swapChain.colorFormat };
-		renderTargets[i].addColorResolveAttachment(attachment);
-	}
+	attachment = AttachmentInfo{ &vulkanContext.swapChain };
+	renderTarget.addColorResolveAttachment(attachment);
 
 	setupRenderPass();
 
-	for (uint32_t i = 0; i < targetsCount; i++) {
-		renderTargets[i].setupFramebuffer({width, height}, renderPass);
-	}
+	uint32_t imageCount = vulkanContext.swapChain.imageCount;
+	renderTarget.setupFramebuffers(imageCount, {width, height}, renderPass);
 
 	Engine::getSingleton()->getCamera()->updateViewportSize(width, height);
 }
@@ -483,10 +475,10 @@ void RenderingDevice::updateRenderArea() {
 void RenderingDevice::setupRenderPass() {
 	VkSubpassDescription subpass{
 		.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-		.colorAttachmentCount = renderTargets[0].getNumColorAttachments(),
-		.pColorAttachments = renderTargets[0].getColorAttachmentReferences(),
-		.pResolveAttachments = renderTargets[0].getResolveAttachmentReferences(),
-		.pDepthStencilAttachment = renderTargets[0].getDepthStencilReference()
+		.colorAttachmentCount = renderTarget.getNumColorAttachments(),
+		.pColorAttachments = renderTarget.getColorAttachmentReferences(),
+		.pResolveAttachments = renderTarget.getResolveAttachmentReferences(),
+		.pDepthStencilAttachment = renderTarget.getDepthStencilReference()
 	};
 
 	VkSubpassDependency dependency{
@@ -500,8 +492,8 @@ void RenderingDevice::setupRenderPass() {
 
 	VkRenderPassCreateInfo renderPassCreateInfo{
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-		.attachmentCount = renderTargets[0].getNumAttachmentDescriptions(),
-		.pAttachments = renderTargets[0].getAttachmentDescriptions(),
+		.attachmentCount = renderTarget.getNumAttachmentDescriptions(),
+		.pAttachments = renderTarget.getAttachmentDescriptions(),
 		.subpassCount = 1,
 		.pSubpasses = &subpass,
 		.dependencyCount = 1,
@@ -512,9 +504,7 @@ void RenderingDevice::setupRenderPass() {
 }
 
 void RenderingDevice::cleanupRenderArea() {
-	for (auto& target : renderTargets) {
-		target.destroy();
-	}
+	renderTarget.destroy();
 
 	vkDestroyRenderPass(vulkanContext.device, renderPass, nullptr);
 }

@@ -3,7 +3,7 @@
 
 #include <glfw/glfw3.h>
 #include <graphics/buffer.h>
-#include <graphics/framebuffer.h>
+#include <graphics/rendertarget.h>
 #include <graphics/vulkancontext.h>
 #include <scene/model.h>
 
@@ -72,7 +72,7 @@ private:
 
 	GLFWwindow* window;
 	VulkanContext vulkanContext;
-	std::vector<RenderTarget> renderTargets;
+	RenderTarget renderTarget;
 
 	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 	VkPipelineLayout pipelineLayout;

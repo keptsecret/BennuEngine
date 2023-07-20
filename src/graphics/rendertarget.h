@@ -1,7 +1,8 @@
-#ifndef BENNU_FRAMEBUFFER_H
-#define BENNU_FRAMEBUFFER_H
+#ifndef BENNU_RENDERTARGET_H
+#define BENNU_RENDERTARGET_H
 
 #include <graphics/texture.h>
+#include <graphics/swapchain.h>
 
 #include <memory>
 
@@ -11,26 +12,20 @@ namespace vkw {
 
 struct AttachmentInfo {
 	AttachmentInfo(Texture* texture) :
-			image(texture->getImage()),
-			imageView(texture->getImageView()),
 			format(texture->getFormat()),
-			layout(texture->getLayout()),
 			isSwapchainResource(false),
 			texture(texture) {}
 
-	AttachmentInfo(VkImage image, VkImageView imageView, VkFormat format) :
-			image(image), imageView(imageView),
-			format(format),
+	AttachmentInfo(Swapchain* swapchain) :
+			format(swapchain->getFormat()),
+			swapchain(swapchain),
 			isSwapchainResource(true) {}
 
-	VkImage image = VK_NULL_HANDLE;
-	VkImageView imageView = VK_NULL_HANDLE;
-
 	VkFormat format;
-	VkImageLayout layout;
 
 	bool isSwapchainResource;
 	Texture* texture = nullptr;
+	Swapchain* swapchain = nullptr;
 };
 
 class RenderTarget {
@@ -41,7 +36,7 @@ public:
 	void addColorResolveAttachment(AttachmentInfo& attachment);
 	void setDepthStencilAttachment(AttachmentInfo& attachment);
 
-	void setupFramebuffer(VkExtent2D extent, VkRenderPass renderPass);
+	void setupFramebuffers(uint32_t count, VkExtent2D extent, VkRenderPass renderPass);
 	void destroy();
 
 	uint32_t getNumColorAttachments() const { return colorReferences.size(); }
@@ -49,22 +44,23 @@ public:
 	bool getHasDepthStencil() const { return hasDepthStencil; }
 
 	const VkAttachmentReference* getColorAttachmentReferences() const { return colorReferences.data(); }
-	const VkAttachmentReference* getResolveAttachmentReferences() const { return resolveReferences.data(); }
-	const VkAttachmentReference* getDepthStencilReference() const { return &depthStencilReference; }
+	const VkAttachmentReference* getResolveAttachmentReferences() const { return hasResolveAttachments ? resolveReferences.data() : nullptr; }
+	const VkAttachmentReference* getDepthStencilReference() const { return hasDepthStencil ? &depthStencilReference : nullptr; }
 
 	uint32_t getNumAttachmentDescriptions() const { return descriptions.size(); }
 	const VkAttachmentDescription* getAttachmentDescriptions() const { return descriptions.data(); }
 
-	const VkFramebuffer& getFramebuffer() const { return framebuffer; }
+	const VkFramebuffer& getFramebuffer(int index) const { return framebuffers[index]; }
 
 private:
-	VkFramebuffer framebuffer = VK_NULL_HANDLE;
+	std::vector<VkFramebuffer> framebuffers;
 	VkExtent2D extent;
 
 	uint32_t numAttachments = 0;
-	std::vector<VkImage> colorRenderTargets;
-	std::vector<VkImage> colorResolveTargets;
-	VkImage depthStencilTarget;
+	// Unused, might need?
+//	std::vector<VkImage> colorRenderTargets;
+//	std::vector<VkImage> colorResolveTargets;
+//	VkImage depthStencilTarget;
 
 	std::vector<VkAttachmentReference> colorReferences;
 	std::vector<VkAttachmentReference> resolveReferences;
@@ -83,4 +79,4 @@ private:
 
 }  // namespace bennu
 
-#endif	// BENNU_FRAMEBUFFER_H
+#endif	// BENNU_RENDERTARGET_H

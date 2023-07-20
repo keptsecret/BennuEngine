@@ -1,5 +1,5 @@
-#include <graphics/framebuffer.h>
 #include <graphics/renderingdevice.h>
+#include <graphics/rendertarget.h>
 #include <graphics/utilities.h>
 
 namespace bennu {
@@ -8,7 +8,6 @@ namespace vkw {
 
 void RenderTarget::addColorAttachment(AttachmentInfo& attachment) {
 	attachments.push_back(attachment);
-	colorRenderTargets.push_back(attachment.image);
 
 	VkAttachmentReference reference{
 		.attachment = numAttachments,
@@ -35,7 +34,6 @@ void RenderTarget::addColorAttachment(AttachmentInfo& attachment) {
 
 void RenderTarget::addColorResolveAttachment(AttachmentInfo& attachment) {
 	attachments.push_back(attachment);
-	colorResolveTargets.push_back(attachment.image);
 
 	VkAttachmentReference reference{
 		.attachment = numAttachments,
@@ -63,7 +61,6 @@ void RenderTarget::addColorResolveAttachment(AttachmentInfo& attachment) {
 
 void RenderTarget::setDepthStencilAttachment(AttachmentInfo& attachment) {
 	attachments.push_back(attachment);
-	depthStencilTarget = attachment.image;
 
 	VkAttachmentReference reference{
 		.attachment = numAttachments,
@@ -89,25 +86,33 @@ void RenderTarget::setDepthStencilAttachment(AttachmentInfo& attachment) {
 	numAttachments++;
 }
 
-void RenderTarget::setupFramebuffer(VkExtent2D ext, VkRenderPass renderPass) {
+void RenderTarget::setupFramebuffers(uint32_t count, VkExtent2D ext, VkRenderPass renderPass) {
 	extent = ext;
 
-	std::vector<VkImageView> viewAttachments(attachments.size());
-	for (uint32_t i = 0; i < attachments.size(); i++) {
-		viewAttachments[i] = attachments[i].imageView;
+	// If there is a swapchain attachment, count should be the number of swapchain images
+	framebuffers.resize(count);
+	for (uint32_t i = 0; i < count; i++) {
+		std::vector<VkImageView> viewAttachments(attachments.size());
+		for (uint32_t j = 0; j < attachments.size(); j++) {
+			if (attachments[j].isSwapchainResource) {
+				viewAttachments[j] = attachments[j].swapchain->getImageView(i);
+			} else {
+				viewAttachments[j] = attachments[j].texture->getImageView();
+			}
+		}
+
+		VkFramebufferCreateInfo framebufferCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+			.renderPass = renderPass,
+			.attachmentCount = (uint32_t)viewAttachments.size(),
+			.pAttachments = viewAttachments.data(),
+			.width = extent.width,
+			.height = extent.height,
+			.layers = 1
+		};
+
+		CHECK_VKRESULT(vkCreateFramebuffer(RenderingDevice::getSingleton()->getDevice(), &framebufferCreateInfo, nullptr, &framebuffers[i]));
 	}
-
-	VkFramebufferCreateInfo framebufferCreateInfo{
-		.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-		.renderPass = renderPass,
-		.attachmentCount = (uint32_t)viewAttachments.size(),
-		.pAttachments = viewAttachments.data(),
-		.width = extent.width,
-		.height = extent.height,
-		.layers = 1
-	};
-
-	CHECK_VKRESULT(vkCreateFramebuffer(RenderingDevice::getSingleton()->getDevice(), &framebufferCreateInfo, nullptr, &framebuffer));
 }
 
 void RenderTarget::destroy() {
@@ -121,7 +126,16 @@ void RenderTarget::destroy() {
 		attachments.pop_back();
 	}
 
-	vkDestroyFramebuffer(RenderingDevice::getSingleton()->getDevice(), framebuffer, nullptr);
+	colorReferences.clear();
+	resolveReferences.clear();
+	descriptions.clear();
+
+	hasResolveAttachments = false;
+	hasDepthStencil = false;
+
+	for (auto& framebuffer : framebuffers) {
+		vkDestroyFramebuffer(RenderingDevice::getSingleton()->getDevice(), framebuffer, nullptr);
+	}
 	numAttachments = 0;
 }
 
