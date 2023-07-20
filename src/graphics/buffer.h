@@ -31,6 +31,16 @@ private:
 	void* mapped = nullptr;
 };
 
+class StorageBuffer : public Buffer {
+public:
+	StorageBuffer(VkDeviceSize size, const void* data = nullptr);
+
+	void update(const void* data);
+
+private:
+	void* mapped = nullptr;
+};
+
 }  // namespace vkw
 
 }  // namespace bennu

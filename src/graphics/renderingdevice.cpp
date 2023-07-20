@@ -1,6 +1,5 @@
 #include <graphics/renderingdevice.h>
 
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 
 #include <graphics/utilities.h>
@@ -8,10 +7,11 @@
 
 namespace bennu {
 
-struct MVP {
+struct GlobalUniforms {
 	glm::mat4 model;
 	glm::mat4 view;
 	glm::mat4 projection;
+	glm::vec3 cameraPosition;
 };
 
 namespace vkw {
@@ -35,10 +35,15 @@ void RenderingDevice::initialize() {
 	createCommandBuffers();
 	createSyncObjects();
 
+	pointLights.push_back(PointLight{.positionr = {0, 0.3, 0, 0.6}, .colori = {0.1, 1, 0.8, 3}});
+
 	uniformBuffers.reserve(MAX_FRAME_LAG);
+	pointLightBuffers.reserve(MAX_FRAME_LAG);
 	for (int i = 0; i < MAX_FRAME_LAG; i++) {
-		uniformBuffers.emplace_back(sizeof(MVP));
+		uniformBuffers.emplace_back(sizeof(GlobalUniforms));
+		pointLightBuffers.emplace_back(sizeof(PointLight) * pointLights.size());
 	}
+
 	createDescriptorPool();
 	createDescriptorSets();
 
@@ -54,7 +59,15 @@ void RenderingDevice::setupDescriptorSetLayout() {
 		.pImmutableSamplers = nullptr
 	};
 
-	std::vector<VkDescriptorSetLayoutBinding> bindings = { mvpLayoutBinding };
+	VkDescriptorSetLayoutBinding lightBufferBinding{
+		.binding = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		.pImmutableSamplers = nullptr
+	};
+
+	std::vector<VkDescriptorSetLayoutBinding> bindings = { mvpLayoutBinding, lightBufferBinding };
 
 	VkDescriptorSetLayoutCreateInfo layoutCreateInfo{
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -62,9 +75,9 @@ void RenderingDevice::setupDescriptorSetLayout() {
 		.pBindings = bindings.data()
 	};
 
-	VkDescriptorSetLayout uniformSetLayout;
-	CHECK_VKRESULT(vkCreateDescriptorSetLayout(vulkanContext.device, &layoutCreateInfo, nullptr, &uniformSetLayout));
-	descriptorSetLayouts.push_back(uniformSetLayout);
+	VkDescriptorSetLayout globalSetLayout;
+	CHECK_VKRESULT(vkCreateDescriptorSetLayout(vulkanContext.device, &layoutCreateInfo, nullptr, &globalSetLayout));
+	descriptorSetLayouts.push_back(globalSetLayout);
 
 	VkDescriptorSetLayoutBinding samplerLayoutBinding{
 		.binding = 0,
@@ -75,6 +88,7 @@ void RenderingDevice::setupDescriptorSetLayout() {
 	};
 
 	bindings = { samplerLayoutBinding };
+	layoutCreateInfo.bindingCount = (uint32_t)bindings.size();
 
 	VkDescriptorSetLayout imageSetLayout;
 	CHECK_VKRESULT(vkCreateDescriptorSetLayout(vulkanContext.device, &layoutCreateInfo, nullptr, &imageSetLayout));
@@ -83,8 +97,8 @@ void RenderingDevice::setupDescriptorSetLayout() {
 
 void RenderingDevice::createRenderPipeline() {
 	VkPipelineShaderStageCreateInfo shaderStages[] = {
-		loadSPIRVShader("../src/graphics/shaders/simple.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
-		loadSPIRVShader("../src/graphics/shaders/simple.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
+		loadSPIRVShader("../src/graphics/shaders/forward.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
+		loadSPIRVShader("../src/graphics/shaders/forward.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
 	};
 
 	std::vector<VkDynamicState> dynamicStates = {
@@ -427,16 +441,18 @@ void RenderingDevice::windowResizeCallback(GLFWwindow* window, int width, int he
 	rd->windowResized = true;
 }
 
-void RenderingDevice::updateUniformBuffers() {
+void RenderingDevice::updateGlobalBuffers() {
 	Engine* e = Engine::getSingleton();
 
-	MVP mvp{
+	GlobalUniforms ubo{
 		.model = glm::mat4(1.f),
 		.view = e->getCamera()->getViewTransform(),
-		.projection = e->getCamera()->getProjectionTransform()
+		.projection = e->getCamera()->getProjectionTransform(),
+		.cameraPosition = e->getCamera()->position
 	};
-	mvp.projection[1][1] *= -1;	 // invert y coordinates
-	uniformBuffers[frameIndex].update(&mvp);
+	uniformBuffers[frameIndex].update(&ubo);
+
+	pointLightBuffers[frameIndex].update(pointLights.data());
 }
 
 void RenderingDevice::updateRenderArea() {
@@ -527,7 +543,7 @@ void RenderingDevice::draw() {
 
 	vkResetCommandBuffer(commandBuffers[frameIndex], 0);
 	buildCommandBuffer();
-	updateUniformBuffers();
+	updateGlobalBuffers();
 
 	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 	VkSubmitInfo submitInfo{
@@ -599,7 +615,7 @@ RenderingDevice* RenderingDevice::getSingleton() {
 }
 
 void RenderingDevice::createDescriptorPool() {
-	std::array<VkDescriptorPoolSize, 2> poolSizes{};
+	std::array<VkDescriptorPoolSize, 3> poolSizes{};
 	poolSizes[0] = {
 		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 		.descriptorCount = MAX_FRAME_LAG
@@ -607,6 +623,10 @@ void RenderingDevice::createDescriptorPool() {
 	poolSizes[1] = {
 		.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 		.descriptorCount = MAX_FRAME_LAG
+	};
+	poolSizes[2] = {
+		.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 5
 	};
 
 	VkDescriptorPoolCreateInfo poolCreateInfo{
@@ -635,10 +655,16 @@ void RenderingDevice::createDescriptorSets() {
 		VkDescriptorBufferInfo bufferInfo{
 			.buffer = uniformBuffers[i].getBuffer(),
 			.offset = 0,
-			.range = sizeof(MVP)
+			.range = sizeof(GlobalUniforms)
 		};
 
-		std::array<VkWriteDescriptorSet, 1> writeDescriptorSets{};
+		VkDescriptorBufferInfo lightBufferInfo{
+			.buffer = pointLightBuffers[i].getBuffer(),
+			.offset = 0,
+			.range = sizeof(PointLight)
+		};
+
+		std::array<VkWriteDescriptorSet, 2> writeDescriptorSets{};
 		writeDescriptorSets[0] = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = descriptorSets[i],
@@ -647,6 +673,15 @@ void RenderingDevice::createDescriptorSets() {
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 			.pBufferInfo = &bufferInfo
+		};
+		writeDescriptorSets[1] = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = descriptorSets[i],
+			.dstBinding = 1,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &lightBufferInfo
 		};
 
 		vkUpdateDescriptorSets(vulkanContext.device, writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);

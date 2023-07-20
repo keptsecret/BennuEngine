@@ -10,6 +10,8 @@
 #include <array>
 #include <glm/glm.hpp>
 
+#include <scene/light.h>
+
 namespace bennu {
 
 namespace vkw {
@@ -48,7 +50,7 @@ private:
 	void createSyncObjects();
 
 	void draw();
-	void updateUniformBuffers();
+	void updateGlobalBuffers();
 
 	// TODO: place into same class?
 	void updateRenderArea();
@@ -91,10 +93,15 @@ private:
 	Model testModel;
 
 	std::vector<UniformBuffer> uniformBuffers;
+	std::vector<StorageBuffer> pointLightBuffers;
+
 	VkDescriptorPool descriptorPool;
 	std::vector<VkDescriptorSet> descriptorSets;
 
 	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_8_BIT;
+
+	// TODO: test lights
+	std::vector<PointLight> pointLights;
 };
 
 }  // namespace vkw
