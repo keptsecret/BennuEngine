@@ -35,7 +35,7 @@ void RenderingDevice::initialize() {
 	createCommandBuffers();
 	createSyncObjects();
 
-	pointLights.push_back(PointLight{.positionr = {0, 0.3, 0, 0.6}, .colori = {0.1, 1, 0.8, 3}});
+	pointLights.push_back(PointLight({0, 0.3, 0}, {0.1, 1, 0.8}, 0.6, 3));
 
 	uniformBuffers.reserve(MAX_FRAME_LAG);
 	pointLightBuffers.reserve(MAX_FRAME_LAG);
