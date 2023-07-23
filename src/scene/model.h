@@ -5,18 +5,11 @@
 #include <assimp/postprocess.h>
 
 #include <graphics/buffer.h>
-#include <graphics/texture.h>
-
-#include <memory>
+#include <scene/material.h>
 
 namespace bennu {
 
-struct Texture {
-	std::unique_ptr<vkw::Texture> texture;
-	std::string filepath;
-};
-
-struct Material {
+struct MaterialPH {
 	std::shared_ptr<Texture> albedoTexture = nullptr;
 	// TODO: stub, move into separate class later
 

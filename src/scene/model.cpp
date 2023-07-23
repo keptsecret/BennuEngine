@@ -19,7 +19,7 @@
 
 namespace bennu {
 
-void Material::createDescriptorSet(const VkDescriptorPool& descriptorPool, const VkDescriptorSetLayout& descriptorSetLayout, uint32_t descriptorBindingFlags) {
+void MaterialPH::createDescriptorSet(const VkDescriptorPool& descriptorPool, const VkDescriptorSetLayout& descriptorSetLayout, uint32_t descriptorBindingFlags) {
 	VkDevice device = vkw::RenderingDevice::getSingleton()->getDevice();
 
 	VkDescriptorSetAllocateInfo allocateInfo{
@@ -209,7 +209,46 @@ void Model::loadMaterials(const aiScene* scene) {
 		const aiMaterial* aimaterial = scene->mMaterials[i];
 
 		std::shared_ptr<Material> newMaterial = std::make_shared<Material>();
+
+		// Load material values
+		aiColor3D color;
+		if (aimaterial->Get(AI_MATKEY_BASE_COLOR, color) == AI_SUCCESS) {
+			newMaterial->albedo = glm::vec3(color.r, color.g, color.b);
+		} else if (aimaterial->Get(AI_MATKEY_COLOR_DIFFUSE, color) == AI_SUCCESS) {
+			newMaterial->albedo = glm::vec3(color.r, color.g, color.b);
+		}
+
+		if (aimaterial->Get(AI_MATKEY_METALLIC_FACTOR, newMaterial->metallic) != AI_SUCCESS) {
+			aimaterial->Get(AI_MATKEY_SPECULAR_FACTOR, newMaterial->metallic);
+		}
+		if (aimaterial->Get(AI_MATKEY_ROUGHNESS_FACTOR, newMaterial->roughness) != AI_SUCCESS) {
+			if (aimaterial->Get(AI_MATKEY_GLOSSINESS_FACTOR, newMaterial->roughness) == AI_SUCCESS) {
+				newMaterial->aux.roughnessGlossyMode = 1;
+			}
+		}
+
+		// Load material textures, nullptr if not
 		newMaterial->albedoTexture = loadTexture(aimaterial, aiTextureType_DIFFUSE);
+		newMaterial->metallicTexture = loadTexture(aimaterial, aiTextureType_METALNESS);
+		if (newMaterial->metallicTexture == nullptr) {
+			newMaterial->metallicTexture = loadTexture(aimaterial, aiTextureType_SPECULAR);
+		}
+		newMaterial->roughnessTexture = loadTexture(aimaterial, aiTextureType_DIFFUSE_ROUGHNESS);
+		newMaterial->ambientTexture = loadTexture(aimaterial, aiTextureType_AMBIENT_OCCLUSION);
+
+		newMaterial->normalMap = loadTexture(aimaterial, aiTextureType_NORMALS);
+
+		if (newMaterial->normalMap) {
+			newMaterial->aux.normalMapMode = 1;
+		} else {
+			// no normal map found, try loading the bump map instead
+			newMaterial->normalMap = loadTexture(aimaterial, aiTextureType_HEIGHT);
+			if (newMaterial->normalMap) {
+				newMaterial->aux.normalMapMode = 2;
+			}
+		}
+
+		newMaterial->apply();
 
 		materials.push_back(newMaterial);
 	}

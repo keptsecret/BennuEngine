@@ -51,6 +51,7 @@ void RenderingDevice::initialize() {
 }
 
 void RenderingDevice::setupDescriptorSetLayout() {
+	// Global values set layout
 	VkDescriptorSetLayoutBinding mvpLayoutBinding{
 		.binding = 0,
 		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -67,28 +68,67 @@ void RenderingDevice::setupDescriptorSetLayout() {
 		.pImmutableSamplers = nullptr
 	};
 
-	std::vector<VkDescriptorSetLayoutBinding> bindings = { mvpLayoutBinding, lightBufferBinding };
+	std::array<VkDescriptorSetLayoutBinding, 2> globalBindings = { mvpLayoutBinding, lightBufferBinding };
 
 	VkDescriptorSetLayoutCreateInfo layoutCreateInfo{
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.bindingCount = (uint32_t)bindings.size(),
-		.pBindings = bindings.data()
+		.bindingCount = (uint32_t)globalBindings.size(),
+		.pBindings = globalBindings.data()
 	};
 
 	VkDescriptorSetLayout globalSetLayout;
 	CHECK_VKRESULT(vkCreateDescriptorSetLayout(vulkanContext.device, &layoutCreateInfo, nullptr, &globalSetLayout));
 	descriptorSetLayouts.push_back(globalSetLayout);
 
-	VkDescriptorSetLayoutBinding samplerLayoutBinding{
+	// Material set layout
+	VkDescriptorSetLayoutBinding matauxLayoutBinding{
 		.binding = 0,
+		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		.pImmutableSamplers = nullptr
+	};
+
+	VkDescriptorSetLayoutBinding albedoLayoutBinding{
+		.binding = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		.pImmutableSamplers = nullptr
+	};
+	VkDescriptorSetLayoutBinding metallicLayoutBinding{
+		.binding = 2,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		.pImmutableSamplers = nullptr
+	};
+	VkDescriptorSetLayoutBinding roughLayoutBinding{
+		.binding = 3,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		.pImmutableSamplers = nullptr
+	};
+	VkDescriptorSetLayoutBinding ambientLayoutBinding{
+		.binding = 4,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		.pImmutableSamplers = nullptr
+	};
+	VkDescriptorSetLayoutBinding normalLayoutBinding{
+		.binding = 5,
 		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
 		.pImmutableSamplers = nullptr
 	};
 
-	bindings = { samplerLayoutBinding };
-	layoutCreateInfo.bindingCount = (uint32_t)bindings.size();
+	std::array<VkDescriptorSetLayoutBinding, 6> matBindings = { matauxLayoutBinding, albedoLayoutBinding, metallicLayoutBinding, roughLayoutBinding, ambientLayoutBinding, normalLayoutBinding };
+	layoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutCreateInfo.bindingCount = (uint32_t)matBindings.size();
+	layoutCreateInfo.pBindings = matBindings.data();
 
 	VkDescriptorSetLayout imageSetLayout;
 	CHECK_VKRESULT(vkCreateDescriptorSetLayout(vulkanContext.device, &layoutCreateInfo, nullptr, &imageSetLayout));
@@ -465,7 +505,8 @@ void RenderingDevice::updateRenderArea() {
 	width = vulkanContext.swapChain.width;
 	height = vulkanContext.swapChain.height;
 
-	Texture2D* color = new Texture2D({ width, height }, vulkanContext.swapChain.colorFormat, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+	Texture2D* color = new Texture2D({ width, height }, nullptr, 0, vulkanContext.swapChain.colorFormat,
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_FILTER_LINEAR,
 			VK_SAMPLER_ADDRESS_MODE_REPEAT, msaaSamples);
 
@@ -618,11 +659,11 @@ void RenderingDevice::createDescriptorPool() {
 	std::array<VkDescriptorPoolSize, 3> poolSizes{};
 	poolSizes[0] = {
 		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-		.descriptorCount = MAX_FRAME_LAG
+		.descriptorCount = 128
 	};
 	poolSizes[1] = {
 		.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		.descriptorCount = MAX_FRAME_LAG
+		.descriptorCount = 1024
 	};
 	poolSizes[2] = {
 		.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,

@@ -130,11 +130,15 @@ set(BENNU_GRAPHICS_SOURCE
 set(BENNU_SCENE_HEADERS
         src/scene/model.h
         src/scene/camera.h
+        src/scene/light.h
+        src/scene/material.h
         )
 
 set(BENNU_SCENE_SOURCE
         src/scene/model.cpp
         src/scene/camera.cpp
+        src/scene/light.cpp
+        src/scene/material.cpp
         )
 
 add_library(bennu_lib STATIC

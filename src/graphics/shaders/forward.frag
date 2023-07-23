@@ -16,7 +16,16 @@ layout (std430, set = 0, binding = 1) buffer PointLightsBuffer {
     PointLight lights[];
 };
 
-layout (set = 1, binding = 0) uniform sampler2D albedoSampler;
+layout (set = 1, binding = 0) uniform MaterialAux {
+    uint normalMapMode;
+    uint roughnessGlossyMode;
+} aux;
+
+layout (set = 1, binding = 1) uniform sampler2D albedoSampler;
+layout (set = 1, binding = 2) uniform sampler2D metallicSampler;
+layout (set = 1, binding = 3) uniform sampler2D roughnessSampler;
+layout (set = 1, binding = 4) uniform sampler2D ambientSampler;
+layout (set = 1, binding = 5) uniform sampler2D normalSampler;
 
 const float PI = 3.14159265359;
 
@@ -34,9 +43,16 @@ void main() {
     vec3 V = normalize(camPos - fragPos);
 
     vec3 albedo = texture(albedoSampler, fragTexCoord).rgb;
-    float metallic = 0.0;
-    float roughness = 1.0;  // temporary hardcode
-    float ao = 1.0;
+    float metallic = texture(metallicSampler, fragTexCoord).b;
+    float roughness = texture(roughnessSampler, fragTexCoord).g;
+    roughness = aux.roughnessGlossyMode == 1 ? 1 - roughness : roughness;
+    float ao = texture(ambientSampler, fragTexCoord).r;
+
+    if (aux.normalMapMode == 1) {
+        N = texture(normalSampler, fragTexCoord).rgb;
+        N = N * 2.0 - 1.0;
+        // TODO: incomplete
+    }
 
     vec3 F0 = vec3(0.04);
     F0 = mix(F0, albedo, metallic);

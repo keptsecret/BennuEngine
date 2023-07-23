@@ -325,14 +325,29 @@ Texture2D::Texture2D(const std::string& filename, VkFilter filter, VkSamplerAddr
 	loadFromFile(filename);
 }
 
-Texture2D::Texture2D(const glm::ivec2& extent, VkFormat format, VkImageLayout layout,
+Texture2D::Texture2D(const glm::ivec2& extent, const void* pixels, VkDeviceSize bufferSize, VkFormat format, VkImageLayout layout,
 		VkImageUsageFlags usage, VkFilter filter, VkSamplerAddressMode addressMode,
 		VkSampleCountFlagBits samples, bool aniso, bool mipmap) :
 		Texture(format, layout, usage | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 				filter, addressMode, samples, 1, 1), anisotropic(aniso), mipmap(mipmap) {
 	this->extent = {(uint32_t)extent.x, (uint32_t)extent.y, 1};
 	initialize();
-	transitionImageLayout(image, format, VK_IMAGE_LAYOUT_UNDEFINED, layout, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels, 0, arrayCount, 0);
+	if (pixels) {
+		Buffer stagingBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, pixels);
+
+		initialize();
+
+		transitionImageLayout(image, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels, 0, arrayCount, 0);
+		copyBufferToImage(stagingBuffer.getBuffer(), image, this->extent, 1, 0);
+
+		if (mipmap) {
+			generateMipmaps(image, this->extent, format, layout, mipLevels, 0, arrayCount);
+		} else {
+			transitionImageLayout(image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, layout, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels, 0, arrayCount, 0);
+		}
+	} else {
+		transitionImageLayout(image, format, VK_IMAGE_LAYOUT_UNDEFINED, layout, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels, 0, arrayCount, 0);
+	}
 }
 
 void Texture2D::loadFromFile(const std::string& filename) {

@@ -69,7 +69,8 @@ public:
 	Texture2D(const std::string& filename, VkFilter filter = VK_FILTER_LINEAR, VkSamplerAddressMode addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
 			bool aniso = true, bool mipmap = true);
 
-	Texture2D(const glm::ivec2& extent, VkFormat format = VK_FORMAT_R8G8B8A8_UNORM, VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+	Texture2D(const glm::ivec2& extent, const void* pixels = nullptr, VkDeviceSize bufferSize = 0,
+			VkFormat format = VK_FORMAT_R8G8B8A8_UNORM, VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
 			VkFilter filter = VK_FILTER_LINEAR, VkSamplerAddressMode addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
 			VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT, bool aniso = false, bool mipmap = false);
