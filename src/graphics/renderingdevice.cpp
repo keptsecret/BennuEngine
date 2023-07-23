@@ -8,7 +8,6 @@
 namespace bennu {
 
 struct GlobalUniforms {
-	glm::mat4 model;
 	glm::mat4 view;
 	glm::mat4 projection;
 	glm::vec3 cameraPosition;
@@ -219,10 +218,18 @@ void RenderingDevice::createRenderPipeline() {
 		.pAttachments = &colorBlendAttachment
 	};
 
+	VkPushConstantRange pushConstants{
+		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+		.offset = 0,
+		.size = sizeof(MeshPushConstants)
+	};
+
 	VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{ ///< good idea to separate this out
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 		.setLayoutCount = (uint32_t)descriptorSetLayouts.size(),
-		.pSetLayouts = descriptorSetLayouts.data()
+		.pSetLayouts = descriptorSetLayouts.data(),
+		.pushConstantRangeCount = 1,
+		.pPushConstantRanges = &pushConstants
 	};
 
 	CHECK_VKRESULT(vkCreatePipelineLayout(vulkanContext.device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout));
@@ -485,7 +492,6 @@ void RenderingDevice::updateGlobalBuffers() {
 	Engine* e = Engine::getSingleton();
 
 	GlobalUniforms ubo{
-		.model = glm::mat4(1.f),
 		.view = e->getCamera()->getViewTransform(),
 		.projection = e->getCamera()->getProjectionTransform(),
 		.cameraPosition = e->getCamera()->position

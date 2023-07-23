@@ -63,8 +63,7 @@ void Triangle::updateBounds(glm::vec3 pmin, glm::vec3 pmax) {
 	bounds.radius = glm::distance(pmin, pmax) * 0.5f;
 }
 
-Mesh::Mesh(glm::mat4 matrix) :
-		uniformBuffer(sizeof(glm::mat4)) {
+Mesh::Mesh(glm::mat4 matrix) {
 }
 
 Mesh::~Mesh() {
@@ -89,7 +88,7 @@ glm::mat4 Node::getWorldTransform() {
 void Node::update() {
 	if (mesh) {
 		glm::mat4 m = getWorldTransform();
-		mesh->uniformBuffer.update(&m);
+		mesh->pushConstants.model = m;
 	}
 
 	for (auto& child : children) {
@@ -154,6 +153,12 @@ void Model::loadFromAiScene(const aiScene* scene, const std::string& filepath) {
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;
 	processNode(scene->mRootNode, scene, nullptr, vertices, indices);
+
+	for (auto& node : linearNodes) {
+		if (node->mesh) {
+			node->update();
+		}
+	}
 
 	uint32_t vertexBufferSize = vertices.size() * sizeof(Vertex);
 	uint32_t indexBufferSize = indices.size() * sizeof(uint32_t);
@@ -309,6 +314,7 @@ void Model::processNode(aiNode* node, const aiScene* scene, std::shared_ptr<Node
 
 		childNode->mesh = processMesh(mesh, scene, newNode->transform, vertices, indices);	// TODO: check transform param
 		newNode->children.push_back(childNode);
+		linearNodes.push_back(childNode.get());
 	}
 	for (unsigned int i = 0; i < node->mNumChildren; i++) {
 		processNode(node->mChildren[i], scene, newNode, vertices, indices);
@@ -390,8 +396,8 @@ void Model::draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout,
 
 void Model::drawNode(std::shared_ptr<Node> node, VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t bindImageset) {
 	if (node->mesh) {
+		vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &node->mesh->pushConstants);
 		for (auto primitive : node->mesh->primitives) {
-			// TODO: bind material descriptor set
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, bindImageset, 1, &primitive->material->descriptorSet, 0, nullptr);
 
 			vkCmdDrawIndexed(commandBuffer, primitive->indexCount, 1, primitive->firstIndex, 0, 0);

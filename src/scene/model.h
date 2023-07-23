@@ -33,11 +33,15 @@ struct Triangle {
 	void updateBounds(glm::vec3 pmin, glm::vec3 pmax);
 };
 
+struct MeshPushConstants {
+	glm::mat4 model;
+};
+
 struct Mesh {
 	std::vector<std::shared_ptr<Triangle>> primitives;
 	std::string name;
 
-	vkw::UniformBuffer uniformBuffer;	// TODO: use push constants?
+	MeshPushConstants pushConstants;
 
 	Mesh(glm::mat4 matrix);
 	~Mesh();

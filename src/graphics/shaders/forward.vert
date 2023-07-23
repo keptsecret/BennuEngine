@@ -1,11 +1,14 @@
 #version 450
 
 layout (set = 0, binding = 0) uniform GlobalUniforms {
-    mat4 model;
     mat4 view;
     mat4 projection;
     vec3 camPos;
 } ubo;
+
+layout (push_constant) uniform PushConstants {
+    mat4 model;
+} meshConstants;
 
 layout (location = 0) in vec3 inPos;
 layout (location = 1) in vec3 inNormal;
@@ -18,8 +21,8 @@ layout (location = 2) out vec2 fragTexCoord;
 layout (location = 3) out vec3 camPos;
 
 void main() {
-    gl_Position = ubo.projection * ubo.view * ubo.model * vec4(inPos, 1.0);
-    fragPos = vec3(ubo.model * vec4(inPos, 1.0));
+    gl_Position = ubo.projection * ubo.view * meshConstants.model * vec4(inPos, 1.0);
+    fragPos = vec3(meshConstants.model * vec4(inPos, 1.0));
     fragNormal = inNormal;
     fragTexCoord = inTexCoord;
 
