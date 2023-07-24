@@ -5,7 +5,7 @@
 #include <graphics/buffer.h>
 #include <graphics/rendertarget.h>
 #include <graphics/vulkancontext.h>
-#include <scene/model.h>
+#include <scene/scene.h>
 
 #include <array>
 #include <glm/glm.hpp>
@@ -54,6 +54,7 @@ private:
 
 	// TODO: place into same class?
 	void updateRenderArea();
+	void setupRenderPass();
 	void cleanupRenderArea();
 
 	VkPipelineShaderStageCreateInfo loadSPIRVShader(const std::string& filename, VkShaderStageFlagBits stage);
@@ -62,9 +63,6 @@ private:
 	void createDescriptorSets();
 
 	static void windowResizeCallback(GLFWwindow* window, int width, int height);
-
-	// TODO: review placement
-	void setupRenderPass();
 
 private:
 	uint32_t width = 800;
@@ -90,18 +88,15 @@ private:
 	std::vector<VkSemaphore> renderCompleteSemaphores;
 	std::vector<VkFence> inFlightFences;
 
-	Model testModel;
-
 	std::vector<UniformBuffer> uniformBuffers;
-	std::vector<StorageBuffer> pointLightBuffers;
 
 	VkDescriptorPool descriptorPool;
 	std::vector<VkDescriptorSet> descriptorSets;
 
 	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_8_BIT;
 
-	// TODO: test lights
-	std::vector<PointLight> pointLights;
+	// TODO: test scene
+	Scene scene;
 };
 
 }  // namespace vkw

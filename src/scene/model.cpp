@@ -19,42 +19,6 @@
 
 namespace bennu {
 
-void MaterialPH::createDescriptorSet(const VkDescriptorPool& descriptorPool, const VkDescriptorSetLayout& descriptorSetLayout, uint32_t descriptorBindingFlags) {
-	VkDevice device = vkw::RenderingDevice::getSingleton()->getDevice();
-
-	VkDescriptorSetAllocateInfo allocateInfo{
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-		.descriptorPool = descriptorPool,
-		.descriptorSetCount = 1,
-		.pSetLayouts = &descriptorSetLayout
-	};
-	CHECK_VKRESULT(vkAllocateDescriptorSets(device, &allocateInfo, &descriptorSet));
-
-	std::vector<VkDescriptorImageInfo> imageDescriptors{};
-	std::vector<VkWriteDescriptorSet> writeDescriptorSets{};
-	if (albedoTexture) {
-		VkDescriptorImageInfo imageInfo{
-			.sampler = albedoTexture->texture->getSampler(),
-			.imageView = albedoTexture->texture->getImageView(),
-			.imageLayout = albedoTexture->texture->getLayout()
-		};
-		imageDescriptors.push_back(imageInfo);
-
-		VkWriteDescriptorSet writeDescriptorSet{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = descriptorSet,
-			.dstBinding = 0,	// TODO: check, depends on layout
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.pImageInfo = &imageInfo
-		};
-		writeDescriptorSets.push_back(writeDescriptorSet);
-	}
-
-	vkUpdateDescriptorSets(device, writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
-}
-
 void Triangle::updateBounds(glm::vec3 pmin, glm::vec3 pmax) {
 	bounds.pMin = pmin;
 	bounds.pMax = pmax;
@@ -201,6 +165,8 @@ void Model::loadFromAiScene(const aiScene* scene, const std::string& filepath) {
 
 		rd->commandBufferSubmitIdle(&commandBuffer, VK_QUEUE_GRAPHICS_BIT);
 	}
+
+	updateModelBounds();
 
 	for (auto& material : materials) {
 		if (material->albedoTexture) {
@@ -382,6 +348,35 @@ std::unique_ptr<Mesh> Model::processMesh(aiMesh* mesh, const aiScene* scene, glm
 	}
 
 	return newMesh;
+}
+
+void Model::updateModelBounds() {
+	bounds.pMin = glm::vec3(FLT_MAX);
+	bounds.pMax = glm::vec3(-FLT_MAX);
+	for (auto& node : nodes) {
+		updateNodeBounds(node.get(), bounds.pMin, bounds.pMax);
+	}
+	bounds.size = bounds.pMax - bounds.pMin;
+	bounds.centroid = (bounds.pMax + bounds.pMin) / 2.f;
+	bounds.radius = glm::distance(bounds.pMin, bounds.pMax) / 2.f;
+}
+
+void Model::updateNodeBounds(Node* node, glm::vec3& pmin, glm::vec3& pmax) {
+	if (node->mesh) {
+		for (auto& triangle : node->mesh->primitives) {
+			glm::vec4 nodeMin = glm::vec4(triangle->bounds.pMin, 1.0f) * node->getWorldTransform();
+			glm::vec4 nodeMax = glm::vec4(triangle->bounds.pMax, 1.0f) * node->getWorldTransform();
+			if (nodeMin.x < pmin.x) { pmin.x = nodeMin.x; }
+			if (nodeMin.y < pmin.y) { pmin.y = nodeMin.y; }
+			if (nodeMin.z < pmin.z) { pmin.z = nodeMin.z; }
+			if (nodeMax.x > pmax.x) { pmax.x = nodeMax.x; }
+			if (nodeMax.y > pmax.y) { pmax.y = nodeMax.y; }
+			if (nodeMax.z > pmax.z) { pmax.z = nodeMax.z; }
+		}
+	}
+	for (auto& child : node->children) {
+		updateNodeBounds(child.get(), pmin, pmax);
+	}
 }
 
 void Model::draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t bindImageset) {

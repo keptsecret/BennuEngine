@@ -9,12 +9,12 @@
 
 namespace bennu {
 
-struct MaterialPH {
-	std::shared_ptr<Texture> albedoTexture = nullptr;
-	// TODO: stub, move into separate class later
-
-	VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
-	void createDescriptorSet(const VkDescriptorPool& descriptorPool, const VkDescriptorSetLayout& descriptorSetLayout, uint32_t descriptorBindingFlags);
+struct Bounds {
+	glm::vec3 pMin{ FLT_MAX };
+	glm::vec3 pMax{ -FLT_MAX };
+	glm::vec3 size;
+	glm::vec3 centroid;
+	float radius;
 };
 
 struct Triangle {
@@ -22,13 +22,7 @@ struct Triangle {
 	uint32_t indexCount;	// should be 3
 	std::shared_ptr<Material> material;
 
-	struct Bounds {
-		glm::vec3 pMin{ FLT_MAX };
-		glm::vec3 pMax{ -FLT_MAX };
-		glm::vec3 size;
-		glm::vec3 centroid;
-		float radius;
-	} bounds;
+	Bounds bounds;
 
 	void updateBounds(glm::vec3 pmin, glm::vec3 pmax);
 };
@@ -90,13 +84,7 @@ public:
 	std::unique_ptr<vkw::Buffer> vertexBuffer;
 	std::unique_ptr<vkw::Buffer> indexBuffer;
 
-	struct Bounds {
-		glm::vec3 pMin{ FLT_MAX };
-		glm::vec3 pMax{ -FLT_MAX };
-		glm::vec3 size;
-		glm::vec3 centroid;
-		float radius;
-	} bounds;
+	Bounds bounds;
 
 	std::string path;
 
@@ -110,6 +98,9 @@ private:
 	std::shared_ptr<Texture> loadTexture(const aiMaterial* mat, aiTextureType type);
 	void processNode(aiNode* node, const aiScene* scene, std::shared_ptr<Node> parent, std::vector<Vertex>& vertices, std::vector<uint32_t>& indices);
 	std::unique_ptr<Mesh> processMesh(aiMesh* mesh, const aiScene* scene, glm::mat4& transform, std::vector<Vertex>& vertices, std::vector<uint32_t>& indices);
+
+	void updateModelBounds();
+	void updateNodeBounds(Node* node, glm::vec3& pmin, glm::vec3& pmax);
 
 	void drawNode(std::shared_ptr<Node> node, VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout = VK_NULL_HANDLE, uint32_t bindImageset = 1);
 };

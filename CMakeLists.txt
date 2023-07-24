@@ -128,6 +128,7 @@ set(BENNU_GRAPHICS_SOURCE
         )
 
 set(BENNU_SCENE_HEADERS
+        src/scene/scene.h
         src/scene/model.h
         src/scene/camera.h
         src/scene/light.h
@@ -135,6 +136,7 @@ set(BENNU_SCENE_HEADERS
         )
 
 set(BENNU_SCENE_SOURCE
+        src/scene/scene.cpp
         src/scene/model.cpp
         src/scene/camera.cpp
         src/scene/light.cpp

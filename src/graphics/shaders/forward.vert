@@ -19,12 +19,20 @@ layout (location = 0) out vec3 fragPos;
 layout (location = 1) out vec3 fragNormal;
 layout (location = 2) out vec2 fragTexCoord;
 layout (location = 3) out vec3 camPos;
+layout (location = 4) out mat3 TBN;
 
 void main() {
     gl_Position = ubo.projection * ubo.view * meshConstants.model * vec4(inPos, 1.0);
     fragPos = vec3(meshConstants.model * vec4(inPos, 1.0));
-    fragNormal = inNormal;
+    fragNormal = vec3(mat4(mat3(meshConstants.model)) * vec4(inNormal, 1.0));
     fragTexCoord = inTexCoord;
 
     camPos = ubo.camPos;
+
+    vec3 T = normalize(vec3(meshConstants.model * vec4(inTangent, 0.0)));
+    vec3 N = normalize(vec3(meshConstants.model * vec4(inNormal, 0.0)));
+
+    T = normalize(T - dot(T, N) * N);
+    vec3 B = cross(N, T);
+    TBN = mat3(T, B, N);
 }

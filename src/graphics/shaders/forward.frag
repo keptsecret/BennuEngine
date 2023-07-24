@@ -11,8 +11,15 @@ layout (location = 0) in vec3 fragPos;
 layout (location = 1) in vec3 fragNormal;
 layout (location = 2) in vec2 fragTexCoord;
 layout (location = 3) in vec3 camPos;
+layout (location = 4) in mat3 TBN;
 
-layout (std430, set = 0, binding = 1) buffer PointLightsBuffer {
+layout (set = 0, binding = 1) uniform DirectionalLight {
+    vec4 direction;
+    vec4 colori;
+    vec4 worldData;
+} directionalLight;
+
+layout (std430, set = 0, binding = 2) buffer PointLightsBuffer {
     PointLight lights[];
 };
 
@@ -51,15 +58,40 @@ void main() {
     if (aux.normalMapMode == 1) {
         N = texture(normalSampler, fragTexCoord).rgb;
         N = N * 2.0 - 1.0;
-        // TODO: incomplete
+        N = normalize(TBN * N);
     }
 
     vec3 F0 = vec3(0.04);
     F0 = mix(F0, albedo, metallic);
 
     vec3 Lo = vec3(0.0);
-    for(int i = 0; i < 1; i++)
+
+    // Directional light
     {
+        vec3 L = normalize(-directionalLight.direction.xyz);
+        vec3 H = normalize(V + L);
+        // skip attenuation
+        vec3 radiance = directionalLight.colori.rgb * directionalLight.colori.a;
+
+        float NDF = distributionGGX(N, H, roughness);
+        float G = geometrySmith(N, V, L, roughness);
+        vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - kS;
+        kD *= 1.0 - metallic;
+
+        vec3 numerator = NDF * G * F;
+        float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;
+        vec3 specular = numerator / denominator;
+
+        // add to outgoing radiance Lo
+        float NdotL = max(dot(N, L), 0.0);
+        Lo += (kD * albedo / PI + specular) * radiance * NdotL;
+    }
+
+    // Point lights
+    for (int i = 0; i < 1; i++) {
         vec3 L = normalize(lights[i].posr.xyz - fragPos);
         vec3 H = normalize(V + L);
         float distance = length(lights[i].posr.xyz - fragPos);

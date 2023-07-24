@@ -34,24 +34,24 @@ void RenderingDevice::initialize() {
 	createCommandBuffers();
 	createSyncObjects();
 
-	pointLights.push_back(PointLight({0, 0.3, 0}, {0.1, 1, 0.8}, 0.6, 3));
-
 	uniformBuffers.reserve(MAX_FRAME_LAG);
-	pointLightBuffers.reserve(MAX_FRAME_LAG);
 	for (int i = 0; i < MAX_FRAME_LAG; i++) {
 		uniformBuffers.emplace_back(sizeof(GlobalUniforms));
-		pointLightBuffers.emplace_back(sizeof(PointLight) * pointLights.size());
 	}
 
 	createDescriptorPool();
-	createDescriptorSets();
 
-	testModel.loadFromFile("../resources/viking_room/viking_room.obj", aiProcess_Triangulate | aiProcess_GenNormals | aiProcess_CalcTangentSpace | aiProcess_FlipUVs);
+	scene.loadModel("../resources/viking_room/viking_room.obj", aiProcess_Triangulate | aiProcess_GenNormals | aiProcess_CalcTangentSpace | aiProcess_FlipUVs);
+	scene.createDirectionalLight({0.1, -1, 0.1}, {1, 0, 0.1}, 1);
+	scene.addPointLight({0, 0.3, 0}, {0.1, 1, 0.8}, 0.6, 3);
+	scene.updateSceneBufferData(true);
+
+	createDescriptorSets();
 }
 
 void RenderingDevice::setupDescriptorSetLayout() {
 	// Global values set layout
-	VkDescriptorSetLayoutBinding mvpLayoutBinding{
+	VkDescriptorSetLayoutBinding globalsLayoutBinding{
 		.binding = 0,
 		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 		.descriptorCount = 1,
@@ -59,15 +59,23 @@ void RenderingDevice::setupDescriptorSetLayout() {
 		.pImmutableSamplers = nullptr
 	};
 
-	VkDescriptorSetLayoutBinding lightBufferBinding{
+	VkDescriptorSetLayoutBinding directionalLayoutBinding{
 		.binding = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		.pImmutableSamplers = nullptr
+	};
+
+	VkDescriptorSetLayoutBinding pointBufferBinding{
+		.binding = 2,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
 		.pImmutableSamplers = nullptr
 	};
 
-	std::array<VkDescriptorSetLayoutBinding, 2> globalBindings = { mvpLayoutBinding, lightBufferBinding };
+	std::array<VkDescriptorSetLayoutBinding, 3> globalBindings = { globalsLayoutBinding, directionalLayoutBinding, pointBufferBinding };
 
 	VkDescriptorSetLayoutCreateInfo layoutCreateInfo{
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -335,7 +343,7 @@ void RenderingDevice::buildCommandBuffer() {
 
 	vkCmdBindDescriptorSets(commandBuffers[frameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[frameIndex], 0, nullptr);
 
-	testModel.draw(commandBuffers[frameIndex], pipelineLayout);
+	scene.draw(commandBuffers[frameIndex], pipelineLayout);
 
 	// Ending the render pass will add an implicit barrier transitioning the frame buffer color attachment to
 	// VK_IMAGE_LAYOUT_PRESENT_SRC_KHR for presenting it to the windowing system
@@ -498,7 +506,7 @@ void RenderingDevice::updateGlobalBuffers() {
 	};
 	uniformBuffers[frameIndex].update(&ubo);
 
-	pointLightBuffers[frameIndex].update(pointLights.data());
+	///< scene.updateSceneBufferData();
 }
 
 void RenderingDevice::updateRenderArea() {
@@ -631,6 +639,8 @@ void RenderingDevice::draw() {
 RenderingDevice::~RenderingDevice() {
 	vkDeviceWaitIdle(vulkanContext.device);
 
+	scene.unload();
+
 	cleanupRenderArea();
 
 	vkDestroyDescriptorPool(vulkanContext.device, descriptorPool, nullptr);
@@ -705,13 +715,19 @@ void RenderingDevice::createDescriptorSets() {
 			.range = sizeof(GlobalUniforms)
 		};
 
-		VkDescriptorBufferInfo lightBufferInfo{
-			.buffer = pointLightBuffers[i].getBuffer(),
+		VkDescriptorBufferInfo directionalBufferInfo{
+			.buffer = scene.getDirectionalLightBuffer()->getBuffer(),
+			.offset = 0,
+			.range = sizeof(DirectionalLight)
+		};
+
+		VkDescriptorBufferInfo pointBufferInfo{
+			.buffer = scene.getPointLightsBuffer()->getBuffer(),
 			.offset = 0,
 			.range = sizeof(PointLight)
 		};
 
-		std::array<VkWriteDescriptorSet, 2> writeDescriptorSets{};
+		std::array<VkWriteDescriptorSet, 3> writeDescriptorSets{};
 		writeDescriptorSets[0] = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = descriptorSets[i],
@@ -727,8 +743,17 @@ void RenderingDevice::createDescriptorSets() {
 			.dstBinding = 1,
 			.dstArrayElement = 0,
 			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.pBufferInfo = &directionalBufferInfo
+		};
+		writeDescriptorSets[2] = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = descriptorSets[i],
+			.dstBinding = 2,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.pBufferInfo = &lightBufferInfo
+			.pBufferInfo = &pointBufferInfo
 		};
 
 		vkUpdateDescriptorSets(vulkanContext.device, writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
