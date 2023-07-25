@@ -13,8 +13,8 @@ public:
 	void transform(const glm::mat4& m);
 	void expand(const glm::vec3& p);
 
-	glm::vec3 min() { return pMin; }
-	glm::vec3 max() { return pMax; }
+	const glm::vec3& min() const { return pMin; }
+	const glm::vec3& max() const { return pMax; }
 
 	glm::vec3 center();
 	float radius();

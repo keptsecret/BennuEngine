@@ -345,8 +345,9 @@ void Model::updateModelBounds() {
 void Model::updateNodeBounds(Node* node, glm::vec3& pmin, glm::vec3& pmax) {
 	if (node->mesh) {
 		for (auto& triangle : node->mesh->primitives) {
-			glm::vec4 nodeMin = glm::vec4(triangle->bounds.min(), 1.0f) * node->getWorldTransform();
-			glm::vec4 nodeMax = glm::vec4(triangle->bounds.max(), 1.0f) * node->getWorldTransform();
+			bounds.transform(node->getWorldTransform());
+			glm::vec3 nodeMin = triangle->bounds.min();
+			glm::vec3 nodeMax = triangle->bounds.max();
 			if (nodeMin.x < pmin.x) { pmin.x = nodeMin.x; }
 			if (nodeMin.y < pmin.y) { pmin.y = nodeMin.y; }
 			if (nodeMin.z < pmin.z) { pmin.z = nodeMin.z; }
