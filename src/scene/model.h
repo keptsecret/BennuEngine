@@ -6,25 +6,16 @@
 
 #include <graphics/buffer.h>
 #include <scene/material.h>
+#include <core/math/aabb.h>
 
 namespace bennu {
-
-struct Bounds {
-	glm::vec3 pMin{ FLT_MAX };
-	glm::vec3 pMax{ -FLT_MAX };
-	glm::vec3 size;
-	glm::vec3 centroid;
-	float radius;
-};
 
 struct Triangle {
 	uint32_t firstIndex;
 	uint32_t indexCount;	// should be 3
-	std::shared_ptr<Material> material;
+	Material* material;
 
-	Bounds bounds;
-
-	void updateBounds(glm::vec3 pmin, glm::vec3 pmax);
+	AABB bounds;
 };
 
 struct MeshPushConstants {
@@ -79,12 +70,12 @@ public:
 	std::vector<Node*> linearNodes;
 
 	std::vector<std::shared_ptr<Texture>> textures;
-	std::vector<std::shared_ptr<Material>> materials;
+	std::vector<std::unique_ptr<Material>> materials;
 
 	std::unique_ptr<vkw::Buffer> vertexBuffer;
 	std::unique_ptr<vkw::Buffer> indexBuffer;
 
-	Bounds bounds;
+	AABB bounds;
 
 	std::string path;
 

@@ -30,7 +30,7 @@ void Scene::addPointLight(glm::vec3 position, glm::vec3 color, float radius, flo
 }
 
 void Scene::updateSceneBufferData(bool rebuildBuffers) {
-	directionalLight.preprocess(bounds.centroid, bounds.radius);
+	directionalLight.preprocess(bounds.center(), bounds.radius());
 
 	if (rebuildBuffers) {
 		if (directionalLightBuffer) {

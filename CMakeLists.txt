@@ -100,11 +100,13 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/external)
 set(BENNU_CORE_HEADERS
         src/core/engine.h
         src/core/inputmanager.h
+        src/core/math/aabb.h
         )
 
 set(BENNU_CORE_SOURCE
         src/core/engine.cpp
         src/core/inputmanager.cpp
+        src/core/math/aabb.cpp
         )
 
 set(BENNU_GRAPHICS_HEADERS

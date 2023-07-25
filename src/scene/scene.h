@@ -25,7 +25,7 @@ public:
 
 private:
 	std::unique_ptr<Model> model;
-	Bounds bounds;
+	AABB bounds;
 
 	std::vector<PointLight> pointLights;
 	DirectionalLight directionalLight{glm::vec3{0, -1, 0}, glm::vec3{1.f}, 0.f};

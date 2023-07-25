@@ -27,7 +27,7 @@ public:
 	DirectionalLight(glm::vec3 direction = glm::vec3{0, -1, 0}, glm::vec3 color = glm::vec3{1.f}, float intensity = 1.f) :
 			direction(glm::normalize(direction), 0), colori(color, intensity) {}
 
-	void preprocess(glm::vec3& center, float radius) {
+	void preprocess(glm::vec3 center, float radius) {
 		worlddata.x = center.x;
 		worlddata.y = center.y;
 		worlddata.z = center.z;

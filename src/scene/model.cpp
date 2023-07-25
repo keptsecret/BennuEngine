@@ -19,14 +19,6 @@
 
 namespace bennu {
 
-void Triangle::updateBounds(glm::vec3 pmin, glm::vec3 pmax) {
-	bounds.pMin = pmin;
-	bounds.pMax = pmax;
-	bounds.size = pmax - pmin;
-	bounds.centroid = (pmax + pmin) * 0.5f;
-	bounds.radius = glm::distance(pmin, pmax) * 0.5f;
-}
-
 Mesh::Mesh(glm::mat4 matrix) {
 }
 
@@ -179,7 +171,7 @@ void Model::loadMaterials(const aiScene* scene) {
 	for (size_t i = 0; i < scene->mNumMaterials; i++) {
 		const aiMaterial* aimaterial = scene->mMaterials[i];
 
-		std::shared_ptr<Material> newMaterial = std::make_shared<Material>();
+		std::unique_ptr<Material> newMaterial = std::make_unique<Material>();
 
 		// Load material values
 		aiColor3D color;
@@ -221,7 +213,7 @@ void Model::loadMaterials(const aiScene* scene) {
 
 		newMaterial->apply();
 
-		materials.push_back(newMaterial);
+		materials.push_back(std::move(newMaterial));
 	}
 }
 
@@ -322,28 +314,19 @@ std::unique_ptr<Mesh> Model::processMesh(aiMesh* mesh, const aiScene* scene, glm
 		uint32_t indexCount = face.mNumIndices;
 
 		glm::vec3 pmin{ FLT_MAX }, pmax{ -FLT_MAX };
+		AABB aabb{};
 		for (uint32_t j = 0; j < face.mNumIndices; j++) {
 			indices.push_back(face.mIndices[j]);
 
 			glm::vec3 pos = vertices[face.mIndices[j]].position;
-			pmin = glm::vec3{
-				std::min(pos.x, pmin.x),
-				std::min(pos.y, pmin.y),
-				std::min(pos.z, pmin.z)
-			};
-
-			pmax = glm::vec3{
-				std::max(pos.x, pmax.x),
-				std::max(pos.y, pmax.y),
-				std::max(pos.z, pmax.z)
-			};
+			aabb.expand(pos);
 		}
 
 		std::shared_ptr<Triangle> triangle = std::make_shared<Triangle>();
 		triangle->firstIndex = firstIndex;
 		triangle->indexCount = indexCount;
-		triangle->material = mesh->mMaterialIndex > -1 ? materials[mesh->mMaterialIndex] : materials.back();
-		triangle->updateBounds(pmin, pmax);
+		triangle->material = mesh->mMaterialIndex > -1 ? materials[mesh->mMaterialIndex].get() : materials.back().get();
+		triangle->bounds = aabb;
 		newMesh->primitives.push_back(triangle);
 	}
 
@@ -351,21 +334,19 @@ std::unique_ptr<Mesh> Model::processMesh(aiMesh* mesh, const aiScene* scene, glm
 }
 
 void Model::updateModelBounds() {
-	bounds.pMin = glm::vec3(FLT_MAX);
-	bounds.pMax = glm::vec3(-FLT_MAX);
+	glm::vec3 pMin{ FLT_MAX };
+	glm::vec3 pMax{ -FLT_MAX };
 	for (auto& node : nodes) {
-		updateNodeBounds(node.get(), bounds.pMin, bounds.pMax);
+		updateNodeBounds(node.get(), pMin, pMax);
 	}
-	bounds.size = bounds.pMax - bounds.pMin;
-	bounds.centroid = (bounds.pMax + bounds.pMin) / 2.f;
-	bounds.radius = glm::distance(bounds.pMin, bounds.pMax) / 2.f;
+	bounds = AABB{pMin, pMax};
 }
 
 void Model::updateNodeBounds(Node* node, glm::vec3& pmin, glm::vec3& pmax) {
 	if (node->mesh) {
 		for (auto& triangle : node->mesh->primitives) {
-			glm::vec4 nodeMin = glm::vec4(triangle->bounds.pMin, 1.0f) * node->getWorldTransform();
-			glm::vec4 nodeMax = glm::vec4(triangle->bounds.pMax, 1.0f) * node->getWorldTransform();
+			glm::vec4 nodeMin = glm::vec4(triangle->bounds.min(), 1.0f) * node->getWorldTransform();
+			glm::vec4 nodeMax = glm::vec4(triangle->bounds.max(), 1.0f) * node->getWorldTransform();
 			if (nodeMin.x < pmin.x) { pmin.x = nodeMin.x; }
 			if (nodeMin.y < pmin.y) { pmin.y = nodeMin.y; }
 			if (nodeMin.z < pmin.z) { pmin.z = nodeMin.z; }
@@ -405,6 +386,9 @@ void Model::drawNode(std::shared_ptr<Node> node, VkCommandBuffer commandBuffer, 
 }
 
 Model::~Model() {
+	for (auto& material : materials) {
+		material.reset();
+	}
 }
 
 }  // namespace bennu
