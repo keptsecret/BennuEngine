@@ -191,15 +191,23 @@ void VulkanContext::createDevice() {
 	// Otherwise, use separate ones
 	uint32_t graphicsQueueFamilyIdx = UINT32_MAX;
 	uint32_t presentQueueFamilyIdx = UINT32_MAX;
+	uint32_t computeQueueFamilyIdx = UINT32_MAX;
 	for (int i = 0; i < queueFamilyProperties.size(); i++) {
 		if (queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
 			if (graphicsQueueFamilyIdx == UINT32_MAX) {
 				graphicsQueueFamilyIdx = i;
 			}
 
+			if (computeQueueFamilyIdx == UINT32_MAX && queueFamilyProperties[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
+				computeQueueFamilyIdx = i;
+			}
+
 			if (supportsPresent[i] == VK_TRUE) {
 				graphicsQueueFamilyIdx = i;
 				presentQueueFamilyIdx = i;
+				if (queueFamilyProperties[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
+					computeQueueFamilyIdx = i;
+				}
 				break;
 			}
 		}
@@ -214,9 +222,19 @@ void VulkanContext::createDevice() {
 		}
 	}
 
+	if (computeQueueFamilyIdx == UINT32_MAX) {
+		for (int i = 0; i < queueFamilyProperties.size(); i++) {
+			if (queueFamilyProperties[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
+				computeQueueFamilyIdx = i;
+				break;
+			}
+		}
+	}
+
 	graphicsQueueFamilyIndex = graphicsQueueFamilyIdx;
 	presentQueueFamilyIndex = presentQueueFamilyIdx;
 	separatePresentQueue = graphicsQueueFamilyIdx != presentQueueFamilyIdx;
+	computeQueueFamilyIndex = computeQueueFamilyIdx;
 
 	const float defaultQueuePriority = 0.f;
 	std::vector<VkDeviceQueueCreateInfo> queueCreateInfos(2);
@@ -265,6 +283,7 @@ void VulkanContext::initializeQueues() {
 	} else {
 		vkGetDeviceQueue(device, presentQueueFamilyIndex, 0, &presentQueue);
 	}
+	vkGetDeviceQueue(device, computeQueueFamilyIndex, 0, &computeQueue);
 
 	uint32_t formatCount;
 	vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, swapChain.surface, &formatCount, nullptr);

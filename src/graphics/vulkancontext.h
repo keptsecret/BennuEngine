@@ -47,6 +47,7 @@ private:
 	std::vector<VkQueueFamilyProperties> queueFamilyProperties;
 	uint32_t graphicsQueueFamilyIndex = UINT32_MAX;
 	uint32_t presentQueueFamilyIndex = UINT32_MAX;
+	uint32_t computeQueueFamilyIndex = UINT32_MAX;
 	bool separatePresentQueue = false;
 
 	bool instanceInitialized = false;
@@ -57,6 +58,7 @@ private:
 	Swapchain swapChain;
 	VkQueue graphicsQueue = VK_NULL_HANDLE;
 	VkQueue presentQueue = VK_NULL_HANDLE;
+	VkQueue computeQueue = VK_NULL_HANDLE;
 
 	VkDebugUtilsMessengerEXT debugMessenger;
 	PFN_vkCreateDebugUtilsMessengerEXT CreateUtilsDebugMessengerEXT = nullptr;

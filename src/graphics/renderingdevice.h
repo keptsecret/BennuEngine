@@ -28,6 +28,8 @@ public:
 	void render();
 
 	GLFWwindow* getWindow() const { return window; }
+	glm::uvec2 getWindowSize() const { return {width, height}; }
+
 	const VkDevice& getDevice() const { return vulkanContext.device; }
 	const VkPhysicalDevice& getPhysicalDevice() const { return vulkanContext.physicalDevice; }
 	VkPhysicalDeviceProperties getPhysicalDeviceProperties() const { return vulkanContext.deviceProperties; }
@@ -65,8 +67,8 @@ private:
 	static void windowResizeCallback(GLFWwindow* window, int width, int height);
 
 private:
-	uint32_t width = 800;
-	uint32_t height = 600;
+	uint32_t width = 1920;
+	uint32_t height = 1080;
 	const uint32_t MAX_FRAME_LAG = 2;
 	bool windowResized = false;
 
