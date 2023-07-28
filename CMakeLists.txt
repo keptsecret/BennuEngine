@@ -117,6 +117,7 @@ set(BENNU_GRAPHICS_HEADERS
         src/graphics/texture.h
         src/graphics/rendertarget.h
         src/graphics/utilities.h
+        src/graphics/clusterbuilder.h
         )
 
 set(BENNU_GRAPHICS_SOURCE
@@ -127,6 +128,7 @@ set(BENNU_GRAPHICS_SOURCE
         src/graphics/texture.cpp
         src/graphics/rendertarget.cpp
         src/graphics/utilities.cpp
+        src/graphics/clusterbuilder.cpp
         )
 
 set(BENNU_SCENE_HEADERS
