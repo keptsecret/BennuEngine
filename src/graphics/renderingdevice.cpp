@@ -7,12 +7,6 @@
 
 namespace bennu {
 
-struct GlobalUniforms {
-	glm::mat4 view;
-	glm::mat4 projection;
-	glm::vec3 cameraPosition;
-};
-
 namespace vkw {
 
 void RenderingDevice::initialize() {
@@ -724,7 +718,7 @@ void RenderingDevice::createDescriptorSets() {
 		VkDescriptorBufferInfo pointBufferInfo{
 			.buffer = scene.getPointLightsBuffer()->getBuffer(),
 			.offset = 0,
-			.range = sizeof(PointLight)
+			.range = scene.getNumLights() * sizeof(PointLight)
 		};
 
 		std::array<VkWriteDescriptorSet, 3> writeDescriptorSets{};

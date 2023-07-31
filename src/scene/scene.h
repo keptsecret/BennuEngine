@@ -7,6 +7,12 @@
 
 namespace bennu {
 
+struct GlobalUniforms {
+	glm::mat4 view;
+	glm::mat4 projection;
+	glm::vec3 cameraPosition;
+};
+
 class Scene {
 public:
 	Scene() {}
@@ -20,6 +26,7 @@ public:
 	void updateSceneBufferData(bool rebuildBuffers = false);
 	const vkw::UniformBuffer* getDirectionalLightBuffer() const { return directionalLightBuffer.get(); }
 	const vkw::StorageBuffer* getPointLightsBuffer() const { return pointLightsBuffer.get(); }
+	uint32_t getNumLights() const { return pointLights.size(); }
 
 	void unload();
 
