@@ -1,8 +1,23 @@
-#include <core/engine.h>
 #include <graphics/clusterbuilder.h>
+
+#include <core/engine.h>
+#include <graphics/utilities.h>
 #include <graphics/renderingdevice.h>
 
 namespace bennu {
+
+void ClusterBuilder::setupBuffers() {
+	clusterBoundsGridBuffer = std::make_unique<vkw::StorageBuffer>(numClusters * sizeof(AABB));
+	clusterGenDataBuffer = std::make_unique<vkw::StorageBuffer>(sizeof(ClusterGenData));
+
+	// Indices of active lights inside a cluster
+	lightIndicesBuffer = std::make_unique<vkw::StorageBuffer>(numClusters * maxLightsPerTile * sizeof(uint32_t));
+
+	// Each tile holds 1. number of lights in the grid and 2. offset of light index list to begin reading indices from
+	lightGridBuffer = std::make_unique<vkw::StorageBuffer>(numClusters * 2 * sizeof(uint32_t));
+
+	lightIndexGlobalCountBuffer = std::make_unique<vkw::StorageBuffer>(sizeof(uint32_t));
+}
 
 glm::vec4 screenToView(glm::vec4 ss, glm::vec2 dim, glm::mat4 invProj) {
 	glm::vec2 uv{ ss.x / dim.x,
@@ -69,10 +84,212 @@ void ClusterBuilder::computeClusterGrids(bool rebuildBuffers) {
 		if (clusterBoundsGridBuffer) {
 			clusterBoundsGridBuffer.reset();
 		}
+		if (clusterGenDataBuffer) {
+			clusterGenDataBuffer.reset();
+		}
 
 		clusterBoundsGridBuffer = std::make_unique<vkw::StorageBuffer>(sizeof(AABB) * clusterGrids.size());
+		clusterGenDataBuffer = std::make_unique<vkw::StorageBuffer>(sizeof(ClusterGenData));
 	}
 	clusterBoundsGridBuffer->update(clusterGrids.data());
+	clusterGenDataBuffer->update(&genData);
+}
+
+void ClusterBuilder::createDescriptorSets(const Scene& scene) {
+	VkDescriptorSetLayoutBinding clusterBoundsBufferBinding{
+		.binding = 0,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	};
+	VkDescriptorSetLayoutBinding clusterGenBufferBinding{
+		.binding = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	};
+
+	VkDescriptorSetLayoutBinding lightBufferBinding{
+		.binding = 2,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	};
+	VkDescriptorSetLayoutBinding lightIndicesBufferBinding{
+		.binding = 3,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	};
+	VkDescriptorSetLayoutBinding lightGridBufferBinding{
+		.binding = 4,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	};
+	VkDescriptorSetLayoutBinding lightGlobalBufferBinding{
+		.binding = 5,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	};
+
+	std::array<VkDescriptorSetLayoutBinding, 6> bindings = { clusterBoundsBufferBinding, clusterGenBufferBinding,
+		lightBufferBinding, lightIndicesBufferBinding, lightGridBufferBinding, lightGlobalBufferBinding };
+
+	VkDevice device = vkw::RenderingDevice::getSingleton()->getDevice();
+	VkDescriptorSetLayoutCreateInfo layoutCreateInfo{
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		.bindingCount = (uint32_t)bindings.size(),
+		.pBindings = bindings.data()
+	};
+	CHECK_VKRESULT(vkCreateDescriptorSetLayout(device, &layoutCreateInfo, nullptr, &clusterLightDescriptorSetLayout));
+
+	VkDescriptorSetAllocateInfo allocateInfo{
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+		.descriptorPool = vkw::RenderingDevice::getSingleton()->getDescriptorPool(),
+		.descriptorSetCount = 1,
+		.pSetLayouts = &clusterLightDescriptorSetLayout
+	};
+	CHECK_VKRESULT(vkAllocateDescriptorSets(device, &allocateInfo, &clusterLightDescriptorSet));
+
+	std::vector<VkWriteDescriptorSet> writeDescriptorSets{};
+	{
+		VkDescriptorBufferInfo clusterBoundsBufferInfo{
+			.buffer = clusterBoundsGridBuffer->getBuffer(),
+			.offset = 0,
+			.range = numClusters * sizeof(AABB)
+		};
+		VkWriteDescriptorSet writeDescriptorSet = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = clusterLightDescriptorSet,
+			.dstBinding = 0,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &clusterBoundsBufferInfo
+		};
+		writeDescriptorSets.push_back(writeDescriptorSet);
+	}
+	{
+		VkDescriptorBufferInfo clusterGenBufferInfo{
+			.buffer = clusterGenDataBuffer->getBuffer(),
+			.offset = 0,
+			.range = sizeof(ClusterGenData)
+		};
+		VkWriteDescriptorSet writeDescriptorSet = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = clusterLightDescriptorSet,
+			.dstBinding = 1,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &clusterGenBufferInfo
+		};
+		writeDescriptorSets.push_back(writeDescriptorSet);
+	}
+
+	{
+		VkDescriptorBufferInfo lightBufferInfo{
+			.buffer = scene.getPointLightsBuffer()->getBuffer(),
+			.offset = 0,
+			.range = scene.getNumLights() * sizeof(PointLight)
+		};
+		VkWriteDescriptorSet writeDescriptorSet = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = clusterLightDescriptorSet,
+			.dstBinding = 2,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &lightBufferInfo
+		};
+		writeDescriptorSets.push_back(writeDescriptorSet);
+	}
+	{
+		VkDescriptorBufferInfo lightIndicesBufferInfo{
+			.buffer = lightIndicesBuffer->getBuffer(),
+			.offset = 0,
+			.range = numClusters * maxLightsPerTile * sizeof(uint32_t)
+		};
+		VkWriteDescriptorSet writeDescriptorSet = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = clusterLightDescriptorSet,
+			.dstBinding = 3,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &lightIndicesBufferInfo
+		};
+		writeDescriptorSets.push_back(writeDescriptorSet);
+	}
+	{
+		VkDescriptorBufferInfo lightGridBufferInfo{
+			.buffer = lightGridBuffer->getBuffer(),
+			.offset = 0,
+			.range = numClusters * 2 * sizeof(uint32_t)
+		};
+		VkWriteDescriptorSet writeDescriptorSet = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = clusterLightDescriptorSet,
+			.dstBinding = 4,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &lightGridBufferInfo
+		};
+		writeDescriptorSets.push_back(writeDescriptorSet);
+	}
+	{
+		VkDescriptorBufferInfo lightGlobalBufferInfo{
+			.buffer = lightIndicesBuffer->getBuffer(),
+			.offset = 0,
+			.range = sizeof(uint32_t)
+		};
+		VkWriteDescriptorSet writeDescriptorSet = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = clusterLightDescriptorSet,
+			.dstBinding = 5,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &lightGlobalBufferInfo
+		};
+		writeDescriptorSets.push_back(writeDescriptorSet);
+	}
+	vkUpdateDescriptorSets(device, writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
+}
+
+void ClusterBuilder::createPipelines() {
+	VkDevice device = vkw::RenderingDevice::getSingleton()->getDevice();
+
+	VkShaderModule clusterLightShaderModule = vkw::utils::loadShader("../src/graphics/shaders/clusterLight.comp.spv", device);
+	VkPipelineShaderStageCreateInfo clusterLightShaderStageInfo{
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+		.stage = VK_SHADER_STAGE_COMPUTE_BIT,
+		.module = clusterLightShaderModule,
+		.pName = "main"
+	};
+
+	VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{
+		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+		.setLayoutCount = 1,
+		.pSetLayouts = &clusterLightDescriptorSetLayout
+	};
+	CHECK_VKRESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &clusterLightPipelineLayout));
+
+	VkComputePipelineCreateInfo pipelineCreateInfo{
+		.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+		.stage = clusterLightShaderStageInfo,
+		.layout = clusterLightPipelineLayout
+	};
+	CHECK_VKRESULT(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &clusterLightPipeline));
 }
 
 }  // namespace bennu

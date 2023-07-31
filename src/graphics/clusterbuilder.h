@@ -18,14 +18,26 @@ struct ClusterGenData {
 
 class ClusterBuilder {
 public:
+	void initialize(const Scene& scene);
+
 private:
+	void setupBuffers();
 	void computeClusterGrids(bool rebuildBuffers = true);
+	void createDescriptorSets(const Scene& scene);
+	void createPipelines();
 
 	const glm::uvec3 gridDims{ 16, 9, 24 };
 	const uint32_t numClusters = gridDims.x * gridDims.y * gridDims.z;
+	const uint32_t maxLightsPerTile = 50;
 
 	std::unique_ptr<vkw::StorageBuffer> clusterBoundsGridBuffer, clusterGenDataBuffer;
 	std::unique_ptr<vkw::StorageBuffer> lightIndicesBuffer, lightGridBuffer, lightIndexGlobalCountBuffer;
+
+	VkDescriptorSetLayout clusterLightDescriptorSetLayout;
+	VkDescriptorSet clusterLightDescriptorSet;
+
+	VkPipelineLayout clusterLightPipelineLayout;
+	VkPipeline clusterLightPipeline;
 };
 
 }  // namespace bennu
