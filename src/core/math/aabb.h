@@ -5,6 +5,8 @@
 
 namespace bennu {
 
+class GPUBB;
+
 class AABB {
 public:
 	AABB() {}
@@ -19,9 +21,23 @@ public:
 	glm::vec3 center();
 	float radius();
 
+	GPUBB toGPUBB();
+
 private:
 	glm::vec3 pMin{ FLT_MAX };
 	glm::vec3 pMax{ -FLT_MAX };
+};
+
+class GPUBB {
+public:
+	GPUBB() {}
+	GPUBB(const glm::vec3& p1, const glm::vec3& p2);
+
+	AABB toAABB();
+
+private:
+	glm::vec4 pMin{ FLT_MAX };
+	glm::vec4 pMax{ -FLT_MAX };
 };
 
 }  // namespace bennu

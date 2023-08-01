@@ -52,4 +52,21 @@ void AABB::expand(const glm::vec3& p) {
 	pMax = glm::max(pMax, p);
 }
 
+GPUBB AABB::toGPUBB() {
+	return {pMin, pMax};
+}
+
+GPUBB::GPUBB(const glm::vec3& p1, const glm::vec3& p2) {
+	pMin = glm::vec4{ std::min(p1.x, p2.x),
+		std::min(p1.y, p2.y),
+		std::min(p1.z, p2.z), 0 };
+	pMax = glm::vec4{ std::max(p1.x, p2.x),
+		std::max(p1.y, p2.y),
+		std::max(p1.z, p2.z), 0 };
+}
+
+AABB GPUBB::toAABB() {
+	return {{pMin.x, pMin.y, pMin.z}, {pMax.x, pMax.y, pMax.z}};
+}
+
 }  // namespace bennu
