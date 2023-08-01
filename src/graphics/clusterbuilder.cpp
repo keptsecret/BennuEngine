@@ -7,16 +7,23 @@
 namespace bennu {
 
 void ClusterBuilder::setupBuffers() {
-	clusterBoundsGridBuffer = std::make_unique<vkw::StorageBuffer>(numClusters * sizeof(AABB));
+	uniformBuffer = std::make_unique<vkw::UniformBuffer>(sizeof(glm::mat4));
+
+	clusterBoundsGridBuffer = std::make_unique<vkw::StorageBuffer>(numClusters * sizeof(GPUBB));
 	clusterGenDataBuffer = std::make_unique<vkw::StorageBuffer>(sizeof(ClusterGenData));
 
 	// Indices of active lights inside a cluster
 	lightIndicesBuffer = std::make_unique<vkw::StorageBuffer>(numClusters * maxLightsPerTile * sizeof(uint32_t));
 
-	// Each tile holds 1. number of lights in the grid and 2. offset of light index list to begin reading indices from
+	// Each grid holds 1. number of lights in the grid and 2. offset of light index list to begin reading indices from
 	lightGridBuffer = std::make_unique<vkw::StorageBuffer>(numClusters * 2 * sizeof(uint32_t));
 
 	lightIndexGlobalCountBuffer = std::make_unique<vkw::StorageBuffer>(sizeof(uint32_t));
+}
+
+void ClusterBuilder::updateUniforms() {
+	glm::mat4 view = Engine::getSingleton()->getCamera()->getViewTransform();
+	uniformBuffer->update(&view);
 }
 
 glm::vec4 screenToView(glm::vec4 ss, glm::vec2 dim, glm::mat4 invProj) {
@@ -52,7 +59,7 @@ void ClusterBuilder::computeClusterGrids(bool rebuildBuffers) {
 		.sliceBiasFactor = -((float)gridDims.z * std::log2f(camera->near_plane) / log2fn)
 	};
 
-	std::vector<AABB> clusterGrids(numClusters);
+	std::vector<GPUBB> clusterGrids(numClusters);
 	glm::vec3 eyePos(0.0);
 	for (uint32_t z = 0; z < gridDims.z; z++) {
 		for (uint32_t y = 0; y < gridDims.y; y++) {
@@ -75,7 +82,7 @@ void ClusterBuilder::computeClusterGrids(bool rebuildBuffers) {
 
 				glm::vec3 pmin = glm::min(glm::min(minPointNear, minPointFar), glm::min(maxPointNear, maxPointFar));
 				glm::vec3 pmax = glm::max(glm::max(minPointNear, minPointFar), glm::max(maxPointNear, maxPointFar));
-				clusterGrids[idx] = AABB(pmin, pmax);
+				clusterGrids[idx] = GPUBB(pmin, pmax);
 			}
 		}
 	}
@@ -88,7 +95,7 @@ void ClusterBuilder::computeClusterGrids(bool rebuildBuffers) {
 			clusterGenDataBuffer.reset();
 		}
 
-		clusterBoundsGridBuffer = std::make_unique<vkw::StorageBuffer>(sizeof(AABB) * clusterGrids.size());
+		clusterBoundsGridBuffer = std::make_unique<vkw::StorageBuffer>(sizeof(GPUBB) * clusterGrids.size());
 		clusterGenDataBuffer = std::make_unique<vkw::StorageBuffer>(sizeof(ClusterGenData));
 	}
 	clusterBoundsGridBuffer->update(clusterGrids.data());
@@ -96,15 +103,23 @@ void ClusterBuilder::computeClusterGrids(bool rebuildBuffers) {
 }
 
 void ClusterBuilder::createDescriptorSets(const Scene& scene) {
+	VkDescriptorSetLayoutBinding globalsBufferBinding{
+		.binding = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	};
+
 	VkDescriptorSetLayoutBinding clusterBoundsBufferBinding{
-		.binding = 0,
+		.binding = 1,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
 	};
 	VkDescriptorSetLayoutBinding clusterGenBufferBinding{
-		.binding = 1,
+		.binding = 2,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
@@ -112,35 +127,35 @@ void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 	};
 
 	VkDescriptorSetLayoutBinding lightBufferBinding{
-		.binding = 2,
-		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 1,
-		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-		.pImmutableSamplers = nullptr
-	};
-	VkDescriptorSetLayoutBinding lightIndicesBufferBinding{
 		.binding = 3,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
 	};
-	VkDescriptorSetLayoutBinding lightGridBufferBinding{
+	VkDescriptorSetLayoutBinding lightIndicesBufferBinding{
 		.binding = 4,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
 	};
-	VkDescriptorSetLayoutBinding lightGlobalBufferBinding{
+	VkDescriptorSetLayoutBinding lightGridBufferBinding{
 		.binding = 5,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = nullptr
 	};
+	VkDescriptorSetLayoutBinding lightGlobalBufferBinding{
+		.binding = 6,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+		.pImmutableSamplers = nullptr
+	};
 
-	std::array<VkDescriptorSetLayoutBinding, 6> bindings = { clusterBoundsBufferBinding, clusterGenBufferBinding,
+	std::array<VkDescriptorSetLayoutBinding, 7> bindings = { globalsBufferBinding, clusterBoundsBufferBinding, clusterGenBufferBinding,
 		lightBufferBinding, lightIndicesBufferBinding, lightGridBufferBinding, lightGlobalBufferBinding };
 
 	VkDevice device = vkw::RenderingDevice::getSingleton()->getDevice();
@@ -161,6 +176,22 @@ void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 
 	std::vector<VkWriteDescriptorSet> writeDescriptorSets{};
 	{
+		VkDescriptorBufferInfo bufferInfo{
+			.buffer = uniformBuffer->getBuffer(),
+			.offset = 0,
+			.range = sizeof(glm::mat4)
+		};
+		writeDescriptorSets[0] = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = clusterLightDescriptorSet,
+			.dstBinding = 0,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.pBufferInfo = &bufferInfo
+		};
+	}
+	{
 		VkDescriptorBufferInfo clusterBoundsBufferInfo{
 			.buffer = clusterBoundsGridBuffer->getBuffer(),
 			.offset = 0,
@@ -169,7 +200,7 @@ void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 		VkWriteDescriptorSet writeDescriptorSet = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = clusterLightDescriptorSet,
-			.dstBinding = 0,
+			.dstBinding = 1,
 			.dstArrayElement = 0,
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -186,7 +217,7 @@ void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 		VkWriteDescriptorSet writeDescriptorSet = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = clusterLightDescriptorSet,
-			.dstBinding = 1,
+			.dstBinding = 2,
 			.dstArrayElement = 0,
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -204,7 +235,7 @@ void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 		VkWriteDescriptorSet writeDescriptorSet = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = clusterLightDescriptorSet,
-			.dstBinding = 2,
+			.dstBinding = 3,
 			.dstArrayElement = 0,
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -221,7 +252,7 @@ void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 		VkWriteDescriptorSet writeDescriptorSet = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = clusterLightDescriptorSet,
-			.dstBinding = 3,
+			.dstBinding = 4,
 			.dstArrayElement = 0,
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -238,7 +269,7 @@ void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 		VkWriteDescriptorSet writeDescriptorSet = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = clusterLightDescriptorSet,
-			.dstBinding = 4,
+			.dstBinding = 5,
 			.dstArrayElement = 0,
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -255,7 +286,7 @@ void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 		VkWriteDescriptorSet writeDescriptorSet = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = clusterLightDescriptorSet,
-			.dstBinding = 5,
+			.dstBinding = 6,
 			.dstArrayElement = 0,
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -290,6 +321,75 @@ void ClusterBuilder::createPipelines() {
 		.layout = clusterLightPipelineLayout
 	};
 	CHECK_VKRESULT(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &clusterLightPipeline));
+}
+
+void ClusterBuilder::createCommandBuffers() {
+	vkw::RenderingDevice* rd = vkw::RenderingDevice::getSingleton();
+
+	VkCommandBufferAllocateInfo allocateInfo{
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+		.commandPool = rd->getCommandPool(),
+		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+		.commandBufferCount = 1
+	};
+
+	CHECK_VKRESULT(vkAllocateCommandBuffers(rd->getDevice(), &allocateInfo, &commandBuffer));
+}
+
+void ClusterBuilder::createSyncObjects() {
+	vkw::RenderingDevice* rd = vkw::RenderingDevice::getSingleton();
+
+	VkSemaphoreCreateInfo semaphoreCreateInfo{
+		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+		.pNext = nullptr
+	};
+	CHECK_VKRESULT(vkCreateSemaphore(rd->getDevice(), &semaphoreCreateInfo, nullptr, &clusteringCompleteSemaphore));
+
+	VkFenceCreateInfo fenceCreateInfo{
+		.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+		.flags = VK_FENCE_CREATE_SIGNALED_BIT
+	};
+	CHECK_VKRESULT(vkCreateFence(rd->getDevice(), &fenceCreateInfo, nullptr, &clusteringInFlightFence));
+}
+
+void ClusterBuilder::buildCommandBuffer() {
+	VkCommandBufferBeginInfo beginInfo{
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.pNext = nullptr,
+		.flags = 0,
+		.pInheritanceInfo = nullptr
+	};
+
+	CHECK_VKRESULT(vkBeginCommandBuffer(commandBuffer, &beginInfo));
+
+	///< probably doesn't need render pass
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, clusterLightPipeline);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, clusterLightPipelineLayout, 0, 1, &clusterLightDescriptorSet, 0, 0);
+
+	vkCmdDispatch(commandBuffer, 1, 1, 6);	// TODO: check dispatch
+	CHECK_VKRESULT(vkEndCommandBuffer(commandBuffer));
+}
+
+void ClusterBuilder::compute() {
+	vkw::RenderingDevice* rd = vkw::RenderingDevice::getSingleton();
+	VkDevice device = rd->getDevice();
+
+	vkWaitForFences(device, 1, &clusteringInFlightFence, VK_TRUE, UINT64_MAX);
+	vkResetFences(device, 1, &clusteringInFlightFence);
+
+	vkResetCommandBuffer(commandBuffer, 0);
+	buildCommandBuffer();
+
+	VkSubmitInfo submitInfo{
+		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		.commandBufferCount = 1,
+		.pCommandBuffers = &commandBuffer,
+		.signalSemaphoreCount = 1,
+		.pSignalSemaphores = &clusteringCompleteSemaphore
+	};
+	CHECK_VKRESULT(vkQueueSubmit(rd->getComputeQueue(), 1, &submitInfo, clusteringInFlightFence));
+
+	// TODO: following process waits for semaphore
 }
 
 }  // namespace bennu

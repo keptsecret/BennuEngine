@@ -35,8 +35,13 @@ public:
 	VkPhysicalDeviceProperties getPhysicalDeviceProperties() const { return vulkanContext.deviceProperties; }
 	VkPhysicalDeviceFeatures getPhysicalDeviceFeatures() const { return vulkanContext.deviceFeatures; }
 
+	const VkQueue& getGraphicsQueue() const { return vulkanContext.graphicsQueue; }
+	const VkQueue& getComputeQueue() const { return vulkanContext.computeQueue; }
+
 	const VkDescriptorPool& getDescriptorPool() const { return descriptorPool; }
 	const VkDescriptorSetLayout& getDescriptorSetLayout(int index) const { return descriptorSetLayouts[index]; }
+
+	const VkCommandPool& getCommandPool() const { return commandPool; }
 
 	VkResult createBuffer(VkBuffer* buffer, VkBufferUsageFlags usageFlags, VkDeviceMemory* memory, VkMemoryPropertyFlags memoryPropertyFlags, VkDeviceSize size, const void* data = nullptr);
 	VkResult createCommandBuffer(VkCommandBuffer* buffer, VkCommandBufferLevel level, bool begin);
