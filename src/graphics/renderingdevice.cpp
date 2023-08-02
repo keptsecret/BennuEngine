@@ -41,6 +41,8 @@ void RenderingDevice::initialize() {
 	scene.updateSceneBufferData(true);
 
 	createDescriptorSets();
+
+	clusterBuilder.initialize(scene);
 }
 
 void RenderingDevice::setupDescriptorSetLayout() {
@@ -575,6 +577,7 @@ void RenderingDevice::cleanupRenderArea() {
 }
 
 void RenderingDevice::render() {
+	clusterBuilder.compute();
 	draw();
 }
 
@@ -594,11 +597,12 @@ void RenderingDevice::draw() {
 	buildCommandBuffer();
 	updateGlobalBuffers();
 
-	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+	VkSemaphore waitSemaphores[] = { clusterBuilder.getCompleteSemaphore(), presentCompleteSemaphores[frameIndex] };
+	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };	///< needs cluster data on fragment step
 	VkSubmitInfo submitInfo{
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-		.waitSemaphoreCount = 1,
-		.pWaitSemaphores = &presentCompleteSemaphores[frameIndex],
+		.waitSemaphoreCount = 2,
+		.pWaitSemaphores = waitSemaphores,
 		.pWaitDstStageMask = waitStages,
 		.commandBufferCount = 1,
 		.pCommandBuffers = &commandBuffers[frameIndex],
@@ -655,6 +659,8 @@ RenderingDevice::~RenderingDevice() {
 	vkDestroyCommandPool(vulkanContext.device, commandPool, nullptr);
 	vkDestroyPipeline(vulkanContext.device, renderPipeline, nullptr);
 	vkDestroyPipelineLayout(vulkanContext.device, pipelineLayout, nullptr);
+
+	clusterBuilder.destroy();
 
 	glfwDestroyWindow(window);
 	glfwTerminate();

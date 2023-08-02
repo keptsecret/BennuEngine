@@ -6,6 +6,30 @@
 
 namespace bennu {
 
+void ClusterBuilder::initialize(const Scene& scene) {
+	createCommandBuffers();
+	setupBuffers();
+	computeClusterGrids(false);
+
+	createDescriptorSets(scene);
+	createPipelines();
+
+	createSyncObjects();
+}
+
+void ClusterBuilder::destroy() {
+	VkDevice device = vkw::RenderingDevice::getSingleton()->getDevice();
+
+	vkDestroyDescriptorSetLayout(device, clusterLightDescriptorSetLayout, nullptr);
+
+	vkDestroySemaphore(device, clusteringCompleteSemaphore, nullptr);
+	vkDestroyFence(device, clusteringInFlightFence, nullptr);
+
+	vkDestroyShaderModule(device, clusterLightShaderModule, nullptr);
+	vkDestroyPipeline(device, clusterLightPipeline, nullptr);
+	vkDestroyPipelineLayout(device, clusterLightPipelineLayout, nullptr);
+}
+
 void ClusterBuilder::setupBuffers() {
 	uniformBuffer = std::make_unique<vkw::UniformBuffer>(sizeof(glm::mat4));
 
@@ -104,7 +128,7 @@ void ClusterBuilder::computeClusterGrids(bool rebuildBuffers) {
 
 void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 	VkDescriptorSetLayoutBinding globalsBufferBinding{
-		.binding = 1,
+		.binding = 0,
 		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 		.descriptorCount = 1,
 		.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
@@ -181,7 +205,7 @@ void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 			.offset = 0,
 			.range = sizeof(glm::mat4)
 		};
-		writeDescriptorSets[0] = {
+		VkWriteDescriptorSet writeDescriptorSet{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = clusterLightDescriptorSet,
 			.dstBinding = 0,
@@ -190,6 +214,7 @@ void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 			.pBufferInfo = &bufferInfo
 		};
+		writeDescriptorSets.push_back(writeDescriptorSet);
 	}
 	{
 		VkDescriptorBufferInfo clusterBoundsBufferInfo{
@@ -197,7 +222,7 @@ void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 			.offset = 0,
 			.range = numClusters * sizeof(AABB)
 		};
-		VkWriteDescriptorSet writeDescriptorSet = {
+		VkWriteDescriptorSet writeDescriptorSet{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = clusterLightDescriptorSet,
 			.dstBinding = 1,
@@ -214,7 +239,7 @@ void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 			.offset = 0,
 			.range = sizeof(ClusterGenData)
 		};
-		VkWriteDescriptorSet writeDescriptorSet = {
+		VkWriteDescriptorSet writeDescriptorSet{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = clusterLightDescriptorSet,
 			.dstBinding = 2,
@@ -232,7 +257,7 @@ void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 			.offset = 0,
 			.range = scene.getNumLights() * sizeof(PointLight)
 		};
-		VkWriteDescriptorSet writeDescriptorSet = {
+		VkWriteDescriptorSet writeDescriptorSet{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = clusterLightDescriptorSet,
 			.dstBinding = 3,
@@ -249,7 +274,7 @@ void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 			.offset = 0,
 			.range = numClusters * maxLightsPerTile * sizeof(uint32_t)
 		};
-		VkWriteDescriptorSet writeDescriptorSet = {
+		VkWriteDescriptorSet writeDescriptorSet{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = clusterLightDescriptorSet,
 			.dstBinding = 4,
@@ -266,7 +291,7 @@ void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 			.offset = 0,
 			.range = numClusters * 2 * sizeof(uint32_t)
 		};
-		VkWriteDescriptorSet writeDescriptorSet = {
+		VkWriteDescriptorSet writeDescriptorSet{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = clusterLightDescriptorSet,
 			.dstBinding = 5,
@@ -283,7 +308,7 @@ void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 			.offset = 0,
 			.range = sizeof(uint32_t)
 		};
-		VkWriteDescriptorSet writeDescriptorSet = {
+		VkWriteDescriptorSet writeDescriptorSet{
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = clusterLightDescriptorSet,
 			.dstBinding = 6,
@@ -300,7 +325,7 @@ void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 void ClusterBuilder::createPipelines() {
 	VkDevice device = vkw::RenderingDevice::getSingleton()->getDevice();
 
-	VkShaderModule clusterLightShaderModule = vkw::utils::loadShader("../src/graphics/shaders/clusterLight.comp.spv", device);
+	clusterLightShaderModule = vkw::utils::loadShader("../src/graphics/shaders/clusterLight.comp.spv", device);
 	VkPipelineShaderStageCreateInfo clusterLightShaderStageInfo{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 		.stage = VK_SHADER_STAGE_COMPUTE_BIT,
@@ -379,6 +404,7 @@ void ClusterBuilder::compute() {
 
 	vkResetCommandBuffer(commandBuffer, 0);
 	buildCommandBuffer();
+	updateUniforms();
 
 	VkSubmitInfo submitInfo{
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,

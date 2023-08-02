@@ -1,7 +1,7 @@
 #ifndef BENNU_CLUSTERBUILDER_H
 #define BENNU_CLUSTERBUILDER_H
 
-#include <graphics/renderingdevice.h>
+#include <scene/scene.h>
 
 #include <glm/glm.hpp>
 
@@ -19,9 +19,11 @@ struct ClusterGenData {
 class ClusterBuilder {
 public:
 	void initialize(const Scene& scene);
-	void updateUniforms();
+	void destroy();
 
 	void compute();
+
+	VkSemaphore getCompleteSemaphore() const { return clusteringCompleteSemaphore; }
 
 private:
 	void setupBuffers();
@@ -32,6 +34,8 @@ private:
 	void createCommandBuffers();
 	void createSyncObjects();
 	void buildCommandBuffer();
+
+	void updateUniforms();
 
 	const glm::uvec3 gridDims{ 16, 9, 24 };
 	const uint32_t numClusters = gridDims.x * gridDims.y * gridDims.z;
@@ -44,6 +48,7 @@ private:
 	VkDescriptorSetLayout clusterLightDescriptorSetLayout;
 	VkDescriptorSet clusterLightDescriptorSet;
 
+	VkShaderModule clusterLightShaderModule;
 	VkPipelineLayout clusterLightPipelineLayout;
 	VkPipeline clusterLightPipeline;
 

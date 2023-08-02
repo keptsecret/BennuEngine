@@ -5,6 +5,7 @@
 #include <graphics/buffer.h>
 #include <graphics/rendertarget.h>
 #include <graphics/vulkancontext.h>
+#include <graphics/clusterbuilder.h>
 #include <scene/scene.h>
 
 #include <array>
@@ -104,6 +105,9 @@ private:
 
 	// TODO: test scene
 	Scene scene;
+
+	// TODO: test cluster builder
+	ClusterBuilder clusterBuilder;
 };
 
 }  // namespace vkw

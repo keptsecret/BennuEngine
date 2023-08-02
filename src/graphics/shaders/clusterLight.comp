@@ -1,0 +1,115 @@
+#version 450
+
+struct PointLight {
+    vec4 posr;// position + radius
+    vec4 colori;// color + intensity
+};
+
+struct LightGrid {
+    uint count;
+    uint offset;
+};
+
+struct AABB {
+    vec4 pmin;
+    vec4 pmax;
+};
+
+layout (set = 0, binding = 0) uniform GlobalUniforms {
+    mat4 view;
+} ubo;
+
+layout (std430, set = 0, binding = 1) buffer ClusterBoundsBuffer {
+    AABB clusters[];
+};
+
+layout (std430, set = 0, binding = 2) buffer ClusterGenDataBuffer {
+    mat4 inverseProjection;
+    uvec4 tileSizes;
+    uvec2 screenDims;
+};
+
+layout (std430, set = 0, binding = 3) buffer LightsBuffer {
+    PointLight lights[];
+};
+
+layout (std430, set = 0, binding = 4) buffer LightIndicesBuffer {
+    uint globalLightIndexList[];
+};
+
+layout (std430, set = 0, binding = 5) buffer LightGridBuffer {
+    LightGrid lightGrid[];
+};
+
+layout (std430, set = 0, binding = 6) buffer globalIndexCountBuffer{
+    uint globalIndexCount;
+};
+
+shared PointLight sharedLights[16 * 9 * 4];
+
+float sqDistPointAABB(vec3 point, uint tile);
+bool intersectSphereAABB(uint light, uint tile);
+
+void main() {
+    globalIndexCount = 0;
+    uint numThreads = gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z;
+    uint numLights  = lights.length();
+    uint numBatches = (numLights + numThreads - 1) / numThreads;
+
+    uint tileIndex = gl_LocalInvocationIndex + gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z * gl_WorkGroupID.z;
+
+    uint visibleLightCount = 0;
+    uint visibleLightIndices[100];
+
+    for (uint batch = 0; batch < numBatches; batch++) {
+        uint lightIndex = batch * numThreads + gl_LocalInvocationIndex;
+
+        lightIndex = min(lightIndex, numLights);
+
+        sharedLights[gl_LocalInvocationIndex] = lights[lightIndex];
+        barrier();
+
+        for (uint light = 0; light < numThreads; light++) {
+            if (intersectSphereAABB(light, tileIndex)) {
+                visibleLightIndices[visibleLightCount] = batch * numThreads + light;
+                visibleLightCount += 1;
+            }
+        }
+    }
+
+    barrier();
+
+    uint offset = atomicAdd(globalIndexCount, visibleLightCount);
+
+    for (uint i = 0; i < visibleLightCount; i++) {
+        globalLightIndexList[offset + i] = visibleLightIndices[i];
+    }
+
+    lightGrid[tileIndex].count = visibleLightCount;
+    lightGrid[tileIndex].offset = offset;
+}
+
+float sqDistPointAABB(vec3 point, uint tile) {
+    float sqDist = 0.0;
+    AABB currentCell = clusters[tile];
+    clusters[tile].pmax[3] = tile;
+
+    for (int i = 0; i < 3; i++) {
+        float v = point[i];
+        if (v < currentCell.pmin[i]) {
+            sqDist += (currentCell.pmin[i] - v) * (currentCell.pmin[i] - v);
+        }
+        if (v > currentCell.pmax[i]) {
+            sqDist += (v - currentCell.pmax[i]) * (v - currentCell.pmax[i]);
+        }
+    }
+    return sqDist;
+}
+
+bool intersectSphereAABB(uint light, uint tile) {
+    float radius = sharedLights[light].posr.w;
+    vec3 center  = vec3(ubo.view * vec4(sharedLights[light].posr.xyz, 1));
+    float squaredDistance = sqDistPointAABB(center, tile);
+
+    return squaredDistance <= (radius * radius);
+}
