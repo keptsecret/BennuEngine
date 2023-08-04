@@ -10,7 +10,9 @@ namespace bennu {
 struct GlobalUniforms {
 	glm::mat4 view;
 	glm::mat4 projection;
-	glm::vec3 cameraPosition;
+	glm::vec4 cameraPosition;
+	float camNear;
+	float camFar;
 };
 
 class Scene {

@@ -1,7 +1,6 @@
-#include <scene/material.h>
-
 #include <graphics/renderingdevice.h>
 #include <graphics/utilities.h>
+#include <scene/material.h>
 
 namespace bennu {
 
@@ -14,7 +13,7 @@ void Material::apply() {
 	if (!albedoTexture) {
 		std::shared_ptr<Texture> texture = std::make_shared<Texture>();
 		texture->isConstantValue = true;
-		texture->constant = glm::vec4{albedo, 1};
+		texture->constant = glm::vec4{ albedo, 1 };
 
 		///< 3-component on Nvidia drivers seems not supported
 		vkw::Texture2D* albedoConst = new vkw::Texture2D({ 1, 1 }, glm::value_ptr(texture->constant), 4 * sizeof(float),
@@ -97,14 +96,12 @@ void Material::createDescriptorSet(VkDescriptorPool const& descriptorPool, VkDes
 	};
 	CHECK_VKRESULT(vkAllocateDescriptorSets(device, &allocateInfo, &descriptorSet));
 
-	std::vector<VkDescriptorImageInfo> imageDescriptors{};
 	std::vector<VkWriteDescriptorSet> writeDescriptorSets{};
 	VkDescriptorBufferInfo bufferInfo{
 		.buffer = auxUbo.getBuffer(),
 		.offset = 0,
 		.range = sizeof(MaterialAux)
 	};
-
 	VkWriteDescriptorSet bufWriteDescriptorSet{
 		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 		.dstSet = descriptorSet,
@@ -116,102 +113,85 @@ void Material::createDescriptorSet(VkDescriptorPool const& descriptorPool, VkDes
 	};
 	writeDescriptorSets.push_back(bufWriteDescriptorSet);
 
-	if (albedoTexture) {
-		VkDescriptorImageInfo imageInfo{
-			.sampler = albedoTexture->texture->getSampler(),
-			.imageView = albedoTexture->texture->getImageView(),
-			.imageLayout = albedoTexture->texture->getLayout()
-		};
-		imageDescriptors.push_back(imageInfo);
+	VkDescriptorImageInfo albedoImageInfo{
+		.sampler = albedoTexture->texture->getSampler(),
+		.imageView = albedoTexture->texture->getImageView(),
+		.imageLayout = albedoTexture->texture->getLayout()
+	};
+	VkWriteDescriptorSet albedoWriteDescriptorSet{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = descriptorSet,
+		.dstBinding = (uint32_t)writeDescriptorSets.size(),
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.pImageInfo = &albedoImageInfo
+	};
+	writeDescriptorSets.push_back(albedoWriteDescriptorSet);
 
-		VkWriteDescriptorSet writeDescriptorSet{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = descriptorSet,
-			.dstBinding = (uint32_t)writeDescriptorSets.size(),
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.pImageInfo = &imageInfo
-		};
-		writeDescriptorSets.push_back(writeDescriptorSet);
-	}
-	if (metallicTexture) {
-		VkDescriptorImageInfo imageInfo{
-			.sampler = metallicTexture->texture->getSampler(),
-			.imageView = metallicTexture->texture->getImageView(),
-			.imageLayout = metallicTexture->texture->getLayout()
-		};
-		imageDescriptors.push_back(imageInfo);
+	VkDescriptorImageInfo metallicImageInfo{
+		.sampler = metallicTexture->texture->getSampler(),
+		.imageView = metallicTexture->texture->getImageView(),
+		.imageLayout = metallicTexture->texture->getLayout()
+	};
+	VkWriteDescriptorSet metallicWriteDescriptorSet{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = descriptorSet,
+		.dstBinding = (uint32_t)writeDescriptorSets.size(),
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.pImageInfo = &metallicImageInfo
+	};
+	writeDescriptorSets.push_back(metallicWriteDescriptorSet);
 
-		VkWriteDescriptorSet writeDescriptorSet{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = descriptorSet,
-			.dstBinding = (uint32_t)writeDescriptorSets.size(),
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.pImageInfo = &imageInfo
-		};
-		writeDescriptorSets.push_back(writeDescriptorSet);
-	}
-	if (roughnessTexture) {
-		VkDescriptorImageInfo imageInfo{
-			.sampler = roughnessTexture->texture->getSampler(),
-			.imageView = roughnessTexture->texture->getImageView(),
-			.imageLayout = roughnessTexture->texture->getLayout()
-		};
-		imageDescriptors.push_back(imageInfo);
+	VkDescriptorImageInfo roughnessImageInfo{
+		.sampler = roughnessTexture->texture->getSampler(),
+		.imageView = roughnessTexture->texture->getImageView(),
+		.imageLayout = roughnessTexture->texture->getLayout()
+	};
+	VkWriteDescriptorSet roughnessWriteDescriptorSet{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = descriptorSet,
+		.dstBinding = (uint32_t)writeDescriptorSets.size(),
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.pImageInfo = &roughnessImageInfo
+	};
+	writeDescriptorSets.push_back(roughnessWriteDescriptorSet);
 
-		VkWriteDescriptorSet writeDescriptorSet{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = descriptorSet,
-			.dstBinding = (uint32_t)writeDescriptorSets.size(),
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.pImageInfo = &imageInfo
-		};
-		writeDescriptorSets.push_back(writeDescriptorSet);
-	}
-	if (ambientTexture) {
-		VkDescriptorImageInfo imageInfo{
-			.sampler = ambientTexture->texture->getSampler(),
-			.imageView = ambientTexture->texture->getImageView(),
-			.imageLayout = ambientTexture->texture->getLayout()
-		};
-		imageDescriptors.push_back(imageInfo);
+	VkDescriptorImageInfo ambientImageInfo{
+		.sampler = ambientTexture->texture->getSampler(),
+		.imageView = ambientTexture->texture->getImageView(),
+		.imageLayout = ambientTexture->texture->getLayout()
+	};
+	VkWriteDescriptorSet ambientWriteDescriptorSet{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = descriptorSet,
+		.dstBinding = (uint32_t)writeDescriptorSets.size(),
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.pImageInfo = &ambientImageInfo
+	};
+	writeDescriptorSets.push_back(ambientWriteDescriptorSet);
 
-		VkWriteDescriptorSet writeDescriptorSet{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = descriptorSet,
-			.dstBinding = (uint32_t)writeDescriptorSets.size(),
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.pImageInfo = &imageInfo
-		};
-		writeDescriptorSets.push_back(writeDescriptorSet);
-	}
-
-	if (normalMap) {
-		VkDescriptorImageInfo imageInfo{
-			.sampler = normalMap->texture->getSampler(),
-			.imageView = normalMap->texture->getImageView(),
-			.imageLayout = normalMap->texture->getLayout()
-		};
-		imageDescriptors.push_back(imageInfo);
-
-		VkWriteDescriptorSet writeDescriptorSet{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = descriptorSet,
-			.dstBinding = (uint32_t)writeDescriptorSets.size(),
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-			.pImageInfo = &imageInfo
-		};
-		writeDescriptorSets.push_back(writeDescriptorSet);
-	}
+	VkDescriptorImageInfo normalsImageInfo{
+		.sampler = normalMap->texture->getSampler(),
+		.imageView = normalMap->texture->getImageView(),
+		.imageLayout = normalMap->texture->getLayout()
+	};
+	VkWriteDescriptorSet normalsWriteDescriptorSet{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = descriptorSet,
+		.dstBinding = (uint32_t)writeDescriptorSets.size(),
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		.pImageInfo = &normalsImageInfo
+	};
+	writeDescriptorSets.push_back(normalsWriteDescriptorSet);
 
 	vkUpdateDescriptorSets(device, writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
 }

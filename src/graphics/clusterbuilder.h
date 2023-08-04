@@ -23,6 +23,10 @@ public:
 
 	void compute();
 
+	uint32_t getNumClusters() const { return numClusters; }
+	uint32_t getMaxLightsPerTile() const { return maxLightsPerTile; }
+
+	std::vector<vkw::StorageBuffer*> getExternalBuffers() const { return { clusterGenDataBuffer.get(), lightIndicesBuffer.get(), lightGridBuffer.get() }; }
 	VkSemaphore getCompleteSemaphore() const { return clusteringCompleteSemaphore; }
 
 private:
@@ -39,7 +43,7 @@ private:
 
 	const glm::uvec3 gridDims{ 16, 9, 24 };
 	const uint32_t numClusters = gridDims.x * gridDims.y * gridDims.z;
-	const uint32_t maxLightsPerTile = 50;
+	const uint32_t maxLightsPerTile = 4;
 
 	std::unique_ptr<vkw::UniformBuffer> uniformBuffer;
 	std::unique_ptr<vkw::StorageBuffer> clusterBoundsGridBuffer, clusterGenDataBuffer;

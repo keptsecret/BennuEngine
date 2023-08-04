@@ -1,8 +1,7 @@
-#include <graphics/clusterbuilder.h>
-
 #include <core/engine.h>
-#include <graphics/utilities.h>
+#include <graphics/clusterbuilder.h>
 #include <graphics/renderingdevice.h>
+#include <graphics/utilities.h>
 
 namespace bennu {
 
@@ -73,8 +72,9 @@ void ClusterBuilder::computeClusterGrids(bool rebuildBuffers) {
 	unsigned int tileWidth = (unsigned int)std::ceilf(screenDim.x / (float)gridDims.x);
 
 	float log2fn = std::log2f(camera->far_plane / camera->near_plane);
+	glm::mat4 proj = camera->getProjectionTransform();
 	ClusterGenData genData{
-		.inverseProjectionMat = glm::inverse(camera->getProjectionTransform()),
+		.inverseProjectionMat = glm::inverse(proj),
 		.tileSizes = {
 				gridDims.x, gridDims.y, gridDims.z, tileWidth },
 		.screenWidth = screenDim.x,
@@ -199,126 +199,114 @@ void ClusterBuilder::createDescriptorSets(const Scene& scene) {
 	CHECK_VKRESULT(vkAllocateDescriptorSets(device, &allocateInfo, &clusterLightDescriptorSet));
 
 	std::vector<VkWriteDescriptorSet> writeDescriptorSets{};
-	{
-		VkDescriptorBufferInfo bufferInfo{
-			.buffer = uniformBuffer->getBuffer(),
-			.offset = 0,
-			.range = sizeof(glm::mat4)
-		};
-		VkWriteDescriptorSet writeDescriptorSet{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = clusterLightDescriptorSet,
-			.dstBinding = 0,
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-			.pBufferInfo = &bufferInfo
-		};
-		writeDescriptorSets.push_back(writeDescriptorSet);
-	}
-	{
-		VkDescriptorBufferInfo clusterBoundsBufferInfo{
-			.buffer = clusterBoundsGridBuffer->getBuffer(),
-			.offset = 0,
-			.range = numClusters * sizeof(AABB)
-		};
-		VkWriteDescriptorSet writeDescriptorSet{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = clusterLightDescriptorSet,
-			.dstBinding = 1,
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.pBufferInfo = &clusterBoundsBufferInfo
-		};
-		writeDescriptorSets.push_back(writeDescriptorSet);
-	}
-	{
-		VkDescriptorBufferInfo clusterGenBufferInfo{
-			.buffer = clusterGenDataBuffer->getBuffer(),
-			.offset = 0,
-			.range = sizeof(ClusterGenData)
-		};
-		VkWriteDescriptorSet writeDescriptorSet{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = clusterLightDescriptorSet,
-			.dstBinding = 2,
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.pBufferInfo = &clusterGenBufferInfo
-		};
-		writeDescriptorSets.push_back(writeDescriptorSet);
-	}
+	VkDescriptorBufferInfo globalsBufferInfo{
+		.buffer = uniformBuffer->getBuffer(),
+		.offset = 0,
+		.range = sizeof(glm::mat4)
+	};
+	VkWriteDescriptorSet globalsWriteDescriptorSet{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = clusterLightDescriptorSet,
+		.dstBinding = 0,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+		.pBufferInfo = &globalsBufferInfo
+	};
+	writeDescriptorSets.push_back(globalsWriteDescriptorSet);
 
-	{
-		VkDescriptorBufferInfo lightBufferInfo{
-			.buffer = scene.getPointLightsBuffer()->getBuffer(),
-			.offset = 0,
-			.range = scene.getNumLights() * sizeof(PointLight)
-		};
-		VkWriteDescriptorSet writeDescriptorSet{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = clusterLightDescriptorSet,
-			.dstBinding = 3,
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.pBufferInfo = &lightBufferInfo
-		};
-		writeDescriptorSets.push_back(writeDescriptorSet);
-	}
-	{
-		VkDescriptorBufferInfo lightIndicesBufferInfo{
-			.buffer = lightIndicesBuffer->getBuffer(),
-			.offset = 0,
-			.range = numClusters * maxLightsPerTile * sizeof(uint32_t)
-		};
-		VkWriteDescriptorSet writeDescriptorSet{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = clusterLightDescriptorSet,
-			.dstBinding = 4,
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.pBufferInfo = &lightIndicesBufferInfo
-		};
-		writeDescriptorSets.push_back(writeDescriptorSet);
-	}
-	{
-		VkDescriptorBufferInfo lightGridBufferInfo{
-			.buffer = lightGridBuffer->getBuffer(),
-			.offset = 0,
-			.range = numClusters * 2 * sizeof(uint32_t)
-		};
-		VkWriteDescriptorSet writeDescriptorSet{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = clusterLightDescriptorSet,
-			.dstBinding = 5,
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.pBufferInfo = &lightGridBufferInfo
-		};
-		writeDescriptorSets.push_back(writeDescriptorSet);
-	}
-	{
-		VkDescriptorBufferInfo lightGlobalBufferInfo{
-			.buffer = lightIndicesBuffer->getBuffer(),
-			.offset = 0,
-			.range = sizeof(uint32_t)
-		};
-		VkWriteDescriptorSet writeDescriptorSet{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = clusterLightDescriptorSet,
-			.dstBinding = 6,
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-			.pBufferInfo = &lightGlobalBufferInfo
-		};
-		writeDescriptorSets.push_back(writeDescriptorSet);
-	}
+	VkDescriptorBufferInfo clusterBoundsBufferInfo{
+		.buffer = clusterBoundsGridBuffer->getBuffer(),
+		.offset = 0,
+		.range = numClusters * sizeof(AABB)
+	};
+	VkWriteDescriptorSet clusterBoundsWriteDescriptorSet{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = clusterLightDescriptorSet,
+		.dstBinding = 1,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.pBufferInfo = &clusterBoundsBufferInfo
+	};
+	writeDescriptorSets.push_back(clusterBoundsWriteDescriptorSet);
+	VkDescriptorBufferInfo clusterGenBufferInfo{
+		.buffer = clusterGenDataBuffer->getBuffer(),
+		.offset = 0,
+		.range = sizeof(ClusterGenData)
+	};
+	VkWriteDescriptorSet clusterGenWriteDescriptorSet{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = clusterLightDescriptorSet,
+		.dstBinding = 2,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.pBufferInfo = &clusterGenBufferInfo
+	};
+	writeDescriptorSets.push_back(clusterGenWriteDescriptorSet);
+
+	VkDescriptorBufferInfo lightBufferInfo{
+		.buffer = scene.getPointLightsBuffer()->getBuffer(),
+		.offset = 0,
+		.range = scene.getNumLights() * sizeof(PointLight)
+	};
+	VkWriteDescriptorSet lightsWriteDescriptorSet{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = clusterLightDescriptorSet,
+		.dstBinding = 3,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.pBufferInfo = &lightBufferInfo
+	};
+	writeDescriptorSets.push_back(lightsWriteDescriptorSet);
+	VkDescriptorBufferInfo lightIndicesBufferInfo{
+		.buffer = lightIndicesBuffer->getBuffer(),
+		.offset = 0,
+		.range = numClusters * maxLightsPerTile * sizeof(uint32_t)
+	};
+	VkWriteDescriptorSet lightIndicesWriteDescriptorSet{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = clusterLightDescriptorSet,
+		.dstBinding = 4,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.pBufferInfo = &lightIndicesBufferInfo
+	};
+	writeDescriptorSets.push_back(lightIndicesWriteDescriptorSet);
+	VkDescriptorBufferInfo lightGridBufferInfo{
+		.buffer = lightGridBuffer->getBuffer(),
+		.offset = 0,
+		.range = numClusters * 2 * sizeof(uint32_t)
+	};
+	VkWriteDescriptorSet lightGridWriteDescriptorSet{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = clusterLightDescriptorSet,
+		.dstBinding = 5,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.pBufferInfo = &lightGridBufferInfo
+	};
+	writeDescriptorSets.push_back(lightGridWriteDescriptorSet);
+	VkDescriptorBufferInfo lightGlobalBufferInfo{
+		.buffer = lightIndicesBuffer->getBuffer(),
+		.offset = 0,
+		.range = sizeof(uint32_t)
+	};
+	VkWriteDescriptorSet lightGlobalWriteDescriptorSet{
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+		.dstSet = clusterLightDescriptorSet,
+		.dstBinding = 6,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.pBufferInfo = &lightGlobalBufferInfo
+	};
+	writeDescriptorSets.push_back(lightGlobalWriteDescriptorSet);
+
 	vkUpdateDescriptorSets(device, writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
 }
 

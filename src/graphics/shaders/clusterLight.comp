@@ -15,6 +15,8 @@ struct AABB {
     vec4 pmax;
 };
 
+layout(local_size_x = 16, local_size_y = 9, local_size_z = 4) in;
+
 layout (set = 0, binding = 0) uniform GlobalUniforms {
     mat4 view;
 } ubo;

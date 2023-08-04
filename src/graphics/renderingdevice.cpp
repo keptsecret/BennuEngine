@@ -38,11 +38,12 @@ void RenderingDevice::initialize() {
 	scene.loadModel("../resources/viking_room/viking_room.obj", aiProcess_Triangulate | aiProcess_GenNormals | aiProcess_CalcTangentSpace | aiProcess_FlipUVs);
 	scene.createDirectionalLight({0.1, -1, 0.1}, {1, 0, 0.1}, 1);
 	scene.addPointLight({0, 0.3, 0}, {0.1, 1, 0.8}, 0.6, 3);
+	//scene.addPointLight({0.4, 0.4, 0.2}, {0.3, 0.5, 0.6}, 0.3, 2);
 	scene.updateSceneBufferData(true);
 
-	createDescriptorSets();
-
 	clusterBuilder.initialize(scene);
+
+	createDescriptorSets();
 }
 
 void RenderingDevice::setupDescriptorSetLayout() {
@@ -71,7 +72,30 @@ void RenderingDevice::setupDescriptorSetLayout() {
 		.pImmutableSamplers = nullptr
 	};
 
-	std::array<VkDescriptorSetLayoutBinding, 3> globalBindings = { globalsLayoutBinding, directionalLayoutBinding, pointBufferBinding };
+	VkDescriptorSetLayoutBinding clusterGenBufferBinding{
+		.binding = 3,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		.pImmutableSamplers = nullptr
+	};
+	VkDescriptorSetLayoutBinding lightIndicesBufferBinding{
+		.binding = 4,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		.pImmutableSamplers = nullptr
+	};
+	VkDescriptorSetLayoutBinding lightGridBufferBinding{
+		.binding = 5,
+		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		.descriptorCount = 1,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		.pImmutableSamplers = nullptr
+	};
+
+	std::array<VkDescriptorSetLayoutBinding, 6> globalBindings = { globalsLayoutBinding, directionalLayoutBinding, pointBufferBinding,
+		clusterGenBufferBinding, lightIndicesBufferBinding, lightGridBufferBinding };
 
 	VkDescriptorSetLayoutCreateInfo layoutCreateInfo{
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -498,7 +522,9 @@ void RenderingDevice::updateGlobalBuffers() {
 	GlobalUniforms ubo{
 		.view = e->getCamera()->getViewTransform(),
 		.projection = e->getCamera()->getProjectionTransform(),
-		.cameraPosition = e->getCamera()->position
+		.cameraPosition = glm::vec4(e->getCamera()->position, 1),
+		.camNear = e->getCamera()->near_plane,
+		.camFar = e->getCamera()->far_plane
 	};
 	uniformBuffers[frameIndex].update(&ubo);
 
@@ -683,7 +709,7 @@ void RenderingDevice::createDescriptorPool() {
 	};
 	poolSizes[2] = {
 		.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-		.descriptorCount = 5
+		.descriptorCount = 128
 	};
 
 	VkDescriptorPoolCreateInfo poolCreateInfo{
@@ -709,7 +735,7 @@ void RenderingDevice::createDescriptorSets() {
 	CHECK_VKRESULT(vkAllocateDescriptorSets(vulkanContext.device, &allocateInfo, descriptorSets.data()));
 
 	for (size_t i = 0; i < MAX_FRAME_LAG; i++) {
-		VkDescriptorBufferInfo bufferInfo{
+		VkDescriptorBufferInfo globalsBufferInfo{
 			.buffer = uniformBuffers[i].getBuffer(),
 			.offset = 0,
 			.range = sizeof(GlobalUniforms)
@@ -727,7 +753,25 @@ void RenderingDevice::createDescriptorSets() {
 			.range = scene.getNumLights() * sizeof(PointLight)
 		};
 
-		std::array<VkWriteDescriptorSet, 3> writeDescriptorSets{};
+		std::vector<StorageBuffer*> clusterBuffers = clusterBuilder.getExternalBuffers();
+
+		VkDescriptorBufferInfo clusterGenBufferInfo{
+			.buffer = clusterBuffers[0]->getBuffer(),
+			.offset = 0,
+			.range = sizeof(ClusterGenData)
+		};
+		VkDescriptorBufferInfo lightIndicesBufferInfo{
+			.buffer = clusterBuffers[1]->getBuffer(),
+			.offset = 0,
+			.range = clusterBuilder.getNumClusters() * clusterBuilder.getMaxLightsPerTile() * sizeof(uint32_t)
+		};
+		VkDescriptorBufferInfo lightGridBufferInfo{
+			.buffer = clusterBuffers[2]->getBuffer(),
+			.offset = 0,
+			.range = clusterBuilder.getNumClusters() * 2 * sizeof(uint32_t)
+		};
+
+		std::array<VkWriteDescriptorSet, 6> writeDescriptorSets{};
 		writeDescriptorSets[0] = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.dstSet = descriptorSets[i],
@@ -735,7 +779,7 @@ void RenderingDevice::createDescriptorSets() {
 			.dstArrayElement = 0,
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-			.pBufferInfo = &bufferInfo
+			.pBufferInfo = &globalsBufferInfo
 		};
 		writeDescriptorSets[1] = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -754,6 +798,33 @@ void RenderingDevice::createDescriptorSets() {
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 			.pBufferInfo = &pointBufferInfo
+		};
+		writeDescriptorSets[3] = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = descriptorSets[i],
+			.dstBinding = 3,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &clusterGenBufferInfo
+		};
+		writeDescriptorSets[4] = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = descriptorSets[i],
+			.dstBinding = 4,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &lightIndicesBufferInfo
+		};
+		writeDescriptorSets[5] = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = descriptorSets[i],
+			.dstBinding = 5,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+			.pBufferInfo = &lightGridBufferInfo
 		};
 
 		vkUpdateDescriptorSets(vulkanContext.device, writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);

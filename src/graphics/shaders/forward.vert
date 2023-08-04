@@ -3,7 +3,9 @@
 layout (set = 0, binding = 0) uniform GlobalUniforms {
     mat4 view;
     mat4 projection;
-    vec3 camPos;
+    vec4 camPos;
+    float camNear;
+    float camFar;
 } ubo;
 
 layout (push_constant) uniform PushConstants {
@@ -19,7 +21,9 @@ layout (location = 0) out vec3 fragPos;
 layout (location = 1) out vec3 fragNormal;
 layout (location = 2) out vec2 fragTexCoord;
 layout (location = 3) out vec3 camPos;
-layout (location = 4) out mat3 TBN;
+layout (location = 4) out float camNear;
+layout (location = 5) out float camFar;
+layout (location = 6) out mat3 TBN;
 
 void main() {
     gl_Position = ubo.projection * ubo.view * meshConstants.model * vec4(inPos, 1.0);
@@ -27,7 +31,9 @@ void main() {
     fragNormal = vec3(mat4(mat3(meshConstants.model)) * vec4(inNormal, 1.0));
     fragTexCoord = inTexCoord;
 
-    camPos = ubo.camPos;
+    camPos = ubo.camPos.xyz;
+    camNear = ubo.camNear;
+    camFar = ubo.camFar;
 
     vec3 T = normalize(vec3(meshConstants.model * vec4(inTangent, 0.0)));
     vec3 N = normalize(vec3(meshConstants.model * vec4(inNormal, 0.0)));
