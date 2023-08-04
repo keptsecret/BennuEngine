@@ -5,6 +5,7 @@
 
 #include <array>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 
 namespace bennu {
@@ -362,7 +363,27 @@ VkBool32 VulkanContext::debugMessengerCallback(
 		VkDebugUtilsMessageTypeFlagsEXT messageType,
 		const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 		void* pUserData) {
-	std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+	std::string prefix("");
+
+	if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
+		prefix = "VERBOSE: ";
+	} else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
+		prefix = "INFO: ";
+	} else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+		prefix = "WARNING: ";
+	} else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+		prefix = "ERROR: ";
+	}
+
+	std::stringstream debugMessage;
+	debugMessage << prefix << "[" << pCallbackData->messageIdNumber << "][" << pCallbackData->pMessageIdName << "] : " << pCallbackData->pMessage;
+
+	if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+		std::cerr << debugMessage.str() << "\n";
+	} else {
+		std::cout << debugMessage.str() << "\n";
+	}
+	fflush(stdout);
 
 	return VK_FALSE;
 }
