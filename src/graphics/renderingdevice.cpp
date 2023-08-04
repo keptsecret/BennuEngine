@@ -342,9 +342,9 @@ void RenderingDevice::buildCommandBuffer() {
 	// Update dynamic viewport state
 	VkViewport viewport{
 		.x = 0.f,
-		.y = 0.f,
+		.y = (float)vulkanContext.swapChain.height,
 		.width = (float)vulkanContext.swapChain.width,
-		.height = (float)vulkanContext.swapChain.height,
+		.height = -((float)vulkanContext.swapChain.height),
 		.minDepth = 0.f,
 		.maxDepth = 1.f,
 	};

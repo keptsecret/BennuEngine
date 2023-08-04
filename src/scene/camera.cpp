@@ -14,7 +14,6 @@ Camera::Camera(const glm::vec3& pos, const glm::vec3& up, float yaw, float pitch
 
 glm::mat4 Camera::getProjectionTransform() const {
 	glm::mat4 proj = glm::perspective(glm::radians(45.f), (float)width / (float)height, near_plane, far_plane);
-	proj[1][1] *= -1;	// invert y coordinates
 	return proj;
 }
 

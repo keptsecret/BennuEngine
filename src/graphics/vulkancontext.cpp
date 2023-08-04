@@ -21,10 +21,10 @@ void VulkanContext::createInstance() {
 		.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
 		.pNext = nullptr,
 		.pApplicationName = "Test Bennu",
-		.applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+		.applicationVersion = VK_MAKE_VERSION(1, 1, 0),
 		.pEngineName = "Bennu Engine",
-		.engineVersion = VK_MAKE_VERSION(1, 0, 0),
-		.apiVersion = VK_API_VERSION_1_0
+		.engineVersion = VK_MAKE_VERSION(1, 1, 0),
+		.apiVersion = VK_API_VERSION_1_1
 	};
 
 	VkInstanceCreateInfo instanceCreateInfo{

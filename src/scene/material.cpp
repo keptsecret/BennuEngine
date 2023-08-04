@@ -1,6 +1,7 @@
+#include <scene/material.h>
+
 #include <graphics/renderingdevice.h>
 #include <graphics/utilities.h>
-#include <scene/material.h>
 
 namespace bennu {
 
