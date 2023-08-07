@@ -23,7 +23,8 @@ layout (location = 2) out vec2 fragTexCoord;
 layout (location = 3) out vec3 camPos;
 layout (location = 4) out float camNear;
 layout (location = 5) out float camFar;
-layout (location = 6) out mat3 TBN;
+layout (location = 6) out vec4 alt_FragCoord;
+layout (location = 7) out mat3 TBN;
 
 void main() {
     gl_Position = ubo.projection * ubo.view * meshConstants.model * vec4(inPos, 1.0);
@@ -34,6 +35,14 @@ void main() {
     camPos = ubo.camPos.xyz;
     camNear = ubo.camNear;
     camFar = ubo.camFar;
+
+    alt_FragCoord = ubo.projection * ubo.view * meshConstants.model * vec4(inPos, 1.0);
+    // Vertex in NDC space
+    alt_FragCoord.xyz /= alt_FragCoord.w;
+    alt_FragCoord.w = 1 / alt_FragCoord.w;
+    // Vertex in window space, multiply by screen dims in fragment shader
+    alt_FragCoord.xyz *= vec3(0.5);
+    alt_FragCoord.xyz += vec3(0.5);
 
     vec3 T = normalize(vec3(meshConstants.model * vec4(inTangent, 0.0)));
     vec3 N = normalize(vec3(meshConstants.model * vec4(inNormal, 0.0)));

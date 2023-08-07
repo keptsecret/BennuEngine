@@ -49,6 +49,8 @@ layout (std430, set = 0, binding = 6) buffer globalIndexCountBuffer{
 
 shared PointLight sharedLights[16 * 9 * 4];
 
+#define MAX_LIGHTS_PER_TILE 50
+
 float sqDistPointAABB(vec3 point, uint tile);
 bool intersectSphereAABB(uint light, uint tile);
 
@@ -87,7 +89,7 @@ void main() {
         globalLightIndexList[offset + i] = visibleLightIndices[i];
     }
 
-    lightGrid[tileIndex].count = visibleLightCount;
+    lightGrid[tileIndex].count = min(visibleLightCount, MAX_LIGHTS_PER_TILE);
     lightGrid[tileIndex].offset = offset;
 }
 

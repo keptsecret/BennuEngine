@@ -18,7 +18,8 @@ layout (location = 2) in vec2 fragTexCoord;
 layout (location = 3) in vec3 camPos;
 layout (location = 4) in float camNear;
 layout (location = 5) in float camFar;
-layout (location = 6) in mat3 TBN;
+layout (location = 6) in vec4 alt_FragCoord;
+layout (location = 7) in mat3 TBN;
 
 layout (set = 0, binding = 1) uniform DirectionalLight {
     vec4 direction;
@@ -119,8 +120,11 @@ void main() {
     }
 
     // Find cluster grid of fragment
-    uint zTile = uint(max(log2(linearDepth(gl_FragCoord.z)) * scale + bias, 0.0));
-    uvec3 tile = uvec3(uvec2(gl_FragCoord.xy / tileSizes[3]), zTile);
+//    vec4 mod_FragCoord = gl_FragCoord;
+    //mod_FragCoord.y = screenDims.y - mod_FragCoord.y;   // make FragCoord origin bottom-left corner
+    uint zTile = uint(max(log2(linearDepth(alt_FragCoord.z)) * scale + bias, 0.0));
+    uvec3 tile = uvec3(uvec2(alt_FragCoord.xy * vec2(screenDims) / tileSizes[3]), zTile);
+    tile = clamp(tile, uvec3(0), uvec3(16, 9, 24));
     uint tileIndex = tile.x + tileSizes.x * tile.y + (tileSizes.x * tileSizes.y) * tile.z;
 
     uint lightCount = lightGrid[tileIndex].count;
@@ -197,7 +201,6 @@ float geometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
     return ggx1 * ggx2;
 }
 
-vec3 fresnelSchlick(float cosTheta, vec3 F0)
-{
+vec3 fresnelSchlick(float cosTheta, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
