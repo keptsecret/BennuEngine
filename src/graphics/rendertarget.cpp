@@ -19,8 +19,8 @@ void RenderTarget::addColorAttachment(AttachmentInfo& attachment) {
 	VkAttachmentDescription description{
 		.format = attachment.texture->getFormat(),
 		.samples = attachment.texture->getSamples(),
-		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+		.loadOp = attachment.loadAction,
+		.storeOp = attachment.storeAction,
 		.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
 		.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
 		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -45,8 +45,8 @@ void RenderTarget::addColorResolveAttachment(AttachmentInfo& attachment) {
 	VkAttachmentDescription description{
 		.format = attachment.format,
 		.samples = VK_SAMPLE_COUNT_1_BIT,
-		.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+		.loadOp = attachment.loadAction,
+		.storeOp = attachment.storeAction,
 		.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
 		.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
 		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -72,13 +72,21 @@ void RenderTarget::setDepthStencilAttachment(AttachmentInfo& attachment) {
 	VkAttachmentDescription description{
 		.format = attachment.texture->getFormat(),
 		.samples = attachment.texture->getSamples(),
-		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-		.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+		.loadOp = attachment.loadAction,
+		.storeOp = attachment.storeAction,
 		.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
 		.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
 		.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 		.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
 	};
+	if (attachment.storeAction == VK_ATTACHMENT_STORE_OP_STORE && attachment.loadAction == VK_ATTACHMENT_LOAD_OP_CLEAR) {
+		// are we writing to depth texture?
+		description.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		description.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	} else if (attachment.storeAction == VK_ATTACHMENT_STORE_OP_STORE && attachment.loadAction == VK_ATTACHMENT_LOAD_OP_LOAD) {
+		description.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		description.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+	}
 
 	descriptions.push_back(description);
 
@@ -119,7 +127,7 @@ void RenderTarget::destroy() {
 	while (!attachments.empty()) {
 		AttachmentInfo attachment = attachments.back();
 
-		if (!attachment.isSwapchainResource && attachment.texture) {
+		if (!attachment.isSwapchainResource && !Texture::hasDepth(attachment.format)) {
 			delete attachment.texture;
 		}
 

@@ -23,7 +23,7 @@ public:
 
 	void createDirectionalLight(glm::vec3 direction, glm::vec3 color, float intensity);
 	void addPointLight(glm::vec3 position, glm::vec3 color, float radius, float intensity);
-	void draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout = VK_NULL_HANDLE, uint32_t bindImageset = 1);
+	void draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout = VK_NULL_HANDLE, uint32_t renderFlags = 0, uint32_t bindImageset = 1);
 
 	void updateSceneBufferData(bool rebuildBuffers = false);
 	const vkw::UniformBuffer* getDirectionalLightBuffer() const { return directionalLightBuffer.get(); }

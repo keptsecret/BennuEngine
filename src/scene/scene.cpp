@@ -48,8 +48,8 @@ void Scene::updateSceneBufferData(bool rebuildBuffers) {
 	pointLightsBuffer->update(pointLights.data());
 }
 
-void Scene::draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t bindImageset) {
-	model->draw(commandBuffer, pipelineLayout, bindImageset);
+void Scene::draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t renderFlags, uint32_t bindImageset) {
+	model->draw(commandBuffer, pipelineLayout, renderFlags, bindImageset);
 }
 
 void Scene::unload() {

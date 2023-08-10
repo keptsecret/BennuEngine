@@ -21,7 +21,7 @@ public:
 	void initialize(const Scene& scene);
 	void destroy();
 
-	void compute();
+	void computeClusterLights(const VkSemaphore& waitSemaphore);
 
 	uint32_t getNumClusters() const { return numClusters; }
 	uint32_t getMaxLightsPerTile() const { return maxLightsPerTile; }

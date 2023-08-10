@@ -22,6 +22,8 @@ struct AttachmentInfo {
 			isSwapchainResource(true) {}
 
 	VkFormat format;
+	VkAttachmentLoadOp loadAction = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	VkAttachmentStoreOp storeAction = VK_ATTACHMENT_STORE_OP_STORE;
 
 	bool isSwapchainResource;
 	Texture* texture = nullptr;

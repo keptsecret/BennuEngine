@@ -384,7 +384,7 @@ void ClusterBuilder::buildCommandBuffer() {
 	CHECK_VKRESULT(vkEndCommandBuffer(commandBuffer));
 }
 
-void ClusterBuilder::compute() {
+void ClusterBuilder::computeClusterLights(const VkSemaphore& waitSemaphore) {
 	vkw::RenderingDevice* rd = vkw::RenderingDevice::getSingleton();
 	VkDevice device = rd->getDevice();
 
@@ -395,8 +395,12 @@ void ClusterBuilder::compute() {
 	buildCommandBuffer();
 	updateUniforms();
 
+	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT };
 	VkSubmitInfo submitInfo{
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		.waitSemaphoreCount = 1,
+		.pWaitSemaphores = &waitSemaphore,
+		.pWaitDstStageMask = waitStages,
 		.commandBufferCount = 1,
 		.pCommandBuffers = &commandBuffer,
 		.signalSemaphoreCount = 1,

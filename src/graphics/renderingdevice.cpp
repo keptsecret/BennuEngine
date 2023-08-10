@@ -19,19 +19,16 @@ void RenderingDevice::initialize() {
 
 	vulkanContext.initialize(window);
 
-	setupDescriptorSetLayout();
+	setupDescriptorSetLayouts();
 	createCommandPool();
 
 	updateRenderArea();
 
-	createRenderPipeline();
+	createRenderPipelines();
 	createCommandBuffers();
 	createSyncObjects();
 
-	uniformBuffers.reserve(MAX_FRAME_LAG);
-	for (int i = 0; i < MAX_FRAME_LAG; i++) {
-		uniformBuffers.emplace_back(sizeof(GlobalUniforms));
-	}
+	uniformBuffer = std::make_unique<vkw::UniformBuffer>(sizeof(GlobalUniforms));
 
 	createDescriptorPool();
 
@@ -46,7 +43,7 @@ void RenderingDevice::initialize() {
 	createDescriptorSets();
 }
 
-void RenderingDevice::setupDescriptorSetLayout() {
+void RenderingDevice::setupDescriptorSetLayouts() {
 	// Global values set layout
 	VkDescriptorSetLayoutBinding globalsLayoutBinding{
 		.binding = 0,
@@ -107,6 +104,17 @@ void RenderingDevice::setupDescriptorSetLayout() {
 	CHECK_VKRESULT(vkCreateDescriptorSetLayout(vulkanContext.device, &layoutCreateInfo, nullptr, &globalSetLayout));
 	descriptorSetLayouts.push_back(globalSetLayout);
 
+	// Depth pre pass set layout
+	{
+		VkDescriptorSetLayoutCreateInfo prepassLayoutCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.bindingCount = 1,
+			.pBindings = &globalsLayoutBinding
+		};
+
+		CHECK_VKRESULT(vkCreateDescriptorSetLayout(vulkanContext.device, &prepassLayoutCreateInfo, nullptr, &depthPassDescriptorSetLayout));
+	}
+
 	// Material set layout
 	VkDescriptorSetLayoutBinding matauxLayoutBinding{
 		.binding = 0,
@@ -162,7 +170,7 @@ void RenderingDevice::setupDescriptorSetLayout() {
 	descriptorSetLayouts.push_back(imageSetLayout);
 }
 
-void RenderingDevice::createRenderPipeline() {
+void RenderingDevice::createRenderPipelines() {
 	VkPipelineShaderStageCreateInfo shaderStages[] = {
 		loadSPIRVShader("../src/graphics/shaders/forward.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
 		loadSPIRVShader("../src/graphics/shaders/forward.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
@@ -223,16 +231,18 @@ void RenderingDevice::createRenderPipeline() {
 	VkPipelineDepthStencilStateCreateInfo depthStencilState{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
 		.depthTestEnable = VK_TRUE,
-		.depthWriteEnable = VK_TRUE,
+		.depthWriteEnable = VK_FALSE,
 		.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
 		.depthBoundsTestEnable = VK_FALSE,
 		.stencilTestEnable = VK_FALSE,
-		.back = {
-				.failOp = VK_STENCIL_OP_KEEP,
-				.passOp = VK_STENCIL_OP_KEEP,
-				.compareOp = VK_COMPARE_OP_ALWAYS }
+		.minDepthBounds = 0.f,
+		.maxDepthBounds = 1.f,
+//		.back = {
+//				.failOp = VK_STENCIL_OP_KEEP,
+//				.passOp = VK_STENCIL_OP_KEEP,
+//				.compareOp = VK_COMPARE_OP_ALWAYS }
 	};
-	depthStencilState.front = depthStencilState.back;
+//	depthStencilState.front = depthStencilState.back;
 
 	VkPipelineColorBlendAttachmentState colorBlendAttachment{
 		.blendEnable = VK_FALSE,
@@ -282,6 +292,60 @@ void RenderingDevice::createRenderPipeline() {
 	};
 
 	CHECK_VKRESULT(vkCreateGraphicsPipelines(vulkanContext.device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &renderPipeline));
+
+	// Depth prepass pipeline
+	{
+		VkPipelineShaderStageCreateInfo prepassShaderStages[] = {
+			loadSPIRVShader("../src/graphics/shaders/depth.vert.spv", VK_SHADER_STAGE_VERTEX_BIT)
+		};
+
+		VkPipelineDepthStencilStateCreateInfo prepassDepthStencilState{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+			.depthTestEnable = VK_TRUE,
+			.depthWriteEnable = VK_TRUE,
+			.depthCompareOp = VK_COMPARE_OP_LESS,
+			.depthBoundsTestEnable = VK_FALSE,
+			.stencilTestEnable = VK_FALSE,
+			.minDepthBounds = 0.f,
+			.maxDepthBounds = 1.f,
+//			.back = {
+//					.failOp = VK_STENCIL_OP_KEEP,
+//					.passOp = VK_STENCIL_OP_KEEP,
+//					.compareOp = VK_COMPARE_OP_ALWAYS }
+		};
+//		prepassDepthStencilState.front = prepassDepthStencilState.back;
+
+		VkPipelineLayoutCreateInfo depthPrePassPipelineLayoutCreateInfo{ ///< good idea to separate this out
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+			.setLayoutCount = 1,
+			.pSetLayouts = &depthPassDescriptorSetLayout,
+			.pushConstantRangeCount = 1,
+			.pPushConstantRanges = &pushConstants
+		};
+
+		CHECK_VKRESULT(vkCreatePipelineLayout(vulkanContext.device, &depthPrePassPipelineLayoutCreateInfo, nullptr, &depthPipelineLayout));
+
+		VkGraphicsPipelineCreateInfo prepassPipelineCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+			.stageCount = 1,
+			.pStages = prepassShaderStages,
+			.pVertexInputState = &vertexInputState,
+			.pInputAssemblyState = &inputAssemblyState,
+			.pViewportState = &viewportState,
+			.pRasterizationState = &rasterizationState,
+			.pMultisampleState = &multisampleState,
+			.pDepthStencilState = &prepassDepthStencilState,
+			.pColorBlendState = nullptr,
+			.pDynamicState = &dynamicState,
+			.layout = depthPipelineLayout,
+			.renderPass = depthPrePass,
+			.subpass = 0,
+			.basePipelineHandle = VK_NULL_HANDLE,
+			.basePipelineIndex = -1
+		};
+
+		CHECK_VKRESULT(vkCreateGraphicsPipelines(vulkanContext.device, VK_NULL_HANDLE, 1, &prepassPipelineCreateInfo, nullptr, &depthPipeline));
+	}
 }
 
 void RenderingDevice::createCommandPool() {
@@ -306,9 +370,12 @@ void RenderingDevice::createCommandBuffers() {
 	};
 
 	CHECK_VKRESULT(vkAllocateCommandBuffers(vulkanContext.device, &allocateInfo, commandBuffers.data()));
+
+	allocateInfo.commandBufferCount = 1;
+	CHECK_VKRESULT(vkAllocateCommandBuffers(vulkanContext.device, &allocateInfo, &depthPrePassCommandBuffer));
 }
 
-void RenderingDevice::buildCommandBuffer() {
+void RenderingDevice::buildRenderCommandBuffer() {
 	VkCommandBufferBeginInfo beginInfo{
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 		.pNext = nullptr,
@@ -316,9 +383,8 @@ void RenderingDevice::buildCommandBuffer() {
 		.pInheritanceInfo = nullptr
 	};
 
-	std::array<VkClearValue, 2> clearValues{};
+	std::array<VkClearValue, 1> clearValues{};
 	clearValues[0].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
-	clearValues[1].depthStencil = {1.0f, 0};
 
 	VkRenderPassBeginInfo renderPassBeginInfo{
 		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -363,7 +429,7 @@ void RenderingDevice::buildCommandBuffer() {
 
 	vkCmdBindDescriptorSets(commandBuffers[frameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[frameIndex], 0, nullptr);
 
-	scene.draw(commandBuffers[frameIndex], pipelineLayout);
+	scene.draw(commandBuffers[frameIndex], pipelineLayout, RenderFlag::BindImages);
 
 	// Ending the render pass will add an implicit barrier transitioning the frame buffer color attachment to
 	// VK_IMAGE_LAYOUT_PRESENT_SRC_KHR for presenting it to the windowing system
@@ -393,6 +459,9 @@ void RenderingDevice::createSyncObjects() {
 
 		CHECK_VKRESULT(vkCreateFence(vulkanContext.device, &fenceCreateInfo, nullptr, &inFlightFences[i]));
 	}
+
+	CHECK_VKRESULT(vkCreateSemaphore(vulkanContext.device, &semaphoreCreateInfo, nullptr, &depthPrePassCompleteSemaphore));
+	CHECK_VKRESULT(vkCreateFence(vulkanContext.device, &fenceCreateInfo, nullptr, &depthPassFence));
 }
 
 VkResult RenderingDevice::createBuffer(VkBuffer* buffer, VkBufferUsageFlags usageFlags, VkDeviceMemory* memory, VkMemoryPropertyFlags memoryPropertyFlags, VkDeviceSize size, const void* data) {
@@ -526,7 +595,7 @@ void RenderingDevice::updateGlobalBuffers() {
 		.camNear = e->getCamera()->near_plane,
 		.camFar = e->getCamera()->far_plane
 	};
-	uniformBuffers[frameIndex].update(&ubo);
+	uniformBuffer->update(&ubo);
 
 	///< scene.updateSceneBufferData();
 }
@@ -550,64 +619,99 @@ void RenderingDevice::updateRenderArea() {
 	renderTarget.addColorAttachment(attachment);
 
 	TextureDepth* depth = new TextureDepth({ width, height }, msaaSamples);
+	depthTexture = std::unique_ptr<Texture>(depth);
 
-	attachment = AttachmentInfo{ depth };
+	attachment = AttachmentInfo{ depthTexture.get() };
+	attachment.loadAction = VK_ATTACHMENT_LOAD_OP_LOAD;
+	attachment.storeAction = VK_ATTACHMENT_STORE_OP_STORE;
 	renderTarget.setDepthStencilAttachment(attachment);
 
+	attachment = AttachmentInfo{ depthTexture.get() };
+	depthPrePassTarget.setDepthStencilAttachment(attachment);
+
 	attachment = AttachmentInfo{ &vulkanContext.swapChain };
+	attachment.loadAction = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	renderTarget.addColorResolveAttachment(attachment);
 
-	setupRenderPass();
+	setupRenderPasses();
 
 	uint32_t imageCount = vulkanContext.swapChain.imageCount;
 	renderTarget.setupFramebuffers(imageCount, {width, height}, renderPass);
+	depthPrePassTarget.setupFramebuffers(1, {width, height}, depthPrePass);
 
 	Engine::getSingleton()->getCamera()->updateViewportSize(width, height);
 }
 
-void RenderingDevice::setupRenderPass() {
-	VkSubpassDescription subpass{
-		.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-		.colorAttachmentCount = renderTarget.getNumColorAttachments(),
-		.pColorAttachments = renderTarget.getColorAttachmentReferences(),
-		.pResolveAttachments = renderTarget.getResolveAttachmentReferences(),
-		.pDepthStencilAttachment = renderTarget.getDepthStencilReference()
-	};
+void RenderingDevice::setupRenderPasses() {
+	{	// Depth pre pass
+		VkSubpassDescription subpass{
+			.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+			.colorAttachmentCount = 0,
+			.pDepthStencilAttachment = depthPrePassTarget.getDepthStencilReference()
+		};
 
-	VkSubpassDependency dependency{
-		.srcSubpass = VK_SUBPASS_EXTERNAL,
-		.dstSubpass = 0,
-		.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-		.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-		.srcAccessMask = 0,
-		.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
-	};
+		VkSubpassDependency dependency{
+			.srcSubpass = VK_SUBPASS_EXTERNAL,
+			.dstSubpass = 0,
+			.srcStageMask = VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
+			.dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+			.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+			.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+		};
 
-	VkRenderPassCreateInfo renderPassCreateInfo{
-		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-		.attachmentCount = renderTarget.getNumAttachmentDescriptions(),
-		.pAttachments = renderTarget.getAttachmentDescriptions(),
-		.subpassCount = 1,
-		.pSubpasses = &subpass,
-		.dependencyCount = 1,
-		.pDependencies = &dependency
-	};
+		VkRenderPassCreateInfo renderPassCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+			.attachmentCount = depthPrePassTarget.getNumAttachmentDescriptions(),
+			.pAttachments = depthPrePassTarget.getAttachmentDescriptions(),
+			.subpassCount = 1,
+			.pSubpasses = &subpass,
+			.dependencyCount = 1,
+			.pDependencies = &dependency
+		};
 
-	CHECK_VKRESULT(vkCreateRenderPass(vulkanContext.device, &renderPassCreateInfo, nullptr, &renderPass));
+		CHECK_VKRESULT(vkCreateRenderPass(vulkanContext.device, &renderPassCreateInfo, nullptr, &depthPrePass));
+	}
+	{	// Main render pass
+		VkSubpassDescription subpass{
+			.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+			.colorAttachmentCount = renderTarget.getNumColorAttachments(),
+			.pColorAttachments = renderTarget.getColorAttachmentReferences(),
+			.pResolveAttachments = renderTarget.getResolveAttachmentReferences(),
+			.pDepthStencilAttachment = renderTarget.getDepthStencilReference()
+		};
+
+		VkSubpassDependency dependency{
+			.srcSubpass = VK_SUBPASS_EXTERNAL,
+			.dstSubpass = 0,
+			.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+			.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+			.srcAccessMask = 0,
+			.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT
+		};
+
+		VkRenderPassCreateInfo renderPassCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+			.attachmentCount = renderTarget.getNumAttachmentDescriptions(),
+			.pAttachments = renderTarget.getAttachmentDescriptions(),
+			.subpassCount = 1,
+			.pSubpasses = &subpass,
+			.dependencyCount = 1,
+			.pDependencies = &dependency
+		};
+
+		CHECK_VKRESULT(vkCreateRenderPass(vulkanContext.device, &renderPassCreateInfo, nullptr, &renderPass));
+	}
 }
 
 void RenderingDevice::cleanupRenderArea() {
 	renderTarget.destroy();
+	depthPrePassTarget.destroy();
 
 	vkDestroyRenderPass(vulkanContext.device, renderPass, nullptr);
+	vkDestroyRenderPass(vulkanContext.device, depthPrePass, nullptr);
 }
 
 void RenderingDevice::render() {
-	clusterBuilder.compute();
-	draw();
-}
-
-void RenderingDevice::draw() {
 	VkResult err = vulkanContext.swapChain.acquireNextImage(presentCompleteSemaphores[frameIndex], &currentBuffer);
 	if (err == VK_ERROR_OUT_OF_DATE_KHR) {
 		updateRenderArea();
@@ -616,27 +720,10 @@ void RenderingDevice::draw() {
 		CHECK_VKRESULT(err);
 	}
 
-	vkWaitForFences(vulkanContext.device, 1, &inFlightFences[frameIndex], VK_TRUE, UINT64_MAX);
-	vkResetFences(vulkanContext.device, 1, &inFlightFences[frameIndex]);
-
-	vkResetCommandBuffer(commandBuffers[frameIndex], 0);
-	buildCommandBuffer();
 	updateGlobalBuffers();
-
-	VkSemaphore waitSemaphores[] = { clusterBuilder.getCompleteSemaphore(), presentCompleteSemaphores[frameIndex] };
-	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };	///< needs cluster data on fragment step
-	VkSubmitInfo submitInfo{
-		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-		.waitSemaphoreCount = 2,
-		.pWaitSemaphores = waitSemaphores,
-		.pWaitDstStageMask = waitStages,
-		.commandBufferCount = 1,
-		.pCommandBuffers = &commandBuffers[frameIndex],
-		.signalSemaphoreCount = 1,
-		.pSignalSemaphores = &renderCompleteSemaphores[frameIndex]
-	};
-
-	CHECK_VKRESULT(vkQueueSubmit(vulkanContext.graphicsQueue, 1, &submitInfo, inFlightFences[frameIndex]));
+	renderDepth();
+	clusterBuilder.computeClusterLights(depthPrePassCompleteSemaphore);
+	renderLighting();
 
 	VkPresentInfoKHR presentInfo{
 		.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -660,6 +747,52 @@ void RenderingDevice::draw() {
 	frameIndex %= MAX_FRAME_LAG;
 }
 
+void RenderingDevice::renderDepth() {
+	vkWaitForFences(vulkanContext.device, 1, &depthPassFence, VK_TRUE, UINT64_MAX);
+	vkResetFences(vulkanContext.device, 1, &depthPassFence);
+
+	vkResetCommandBuffer(depthPrePassCommandBuffer, 0);
+	buildPrepassCommandBuffer();
+
+	VkSemaphore waitSemaphores[] = { presentCompleteSemaphores[frameIndex] };
+	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+	VkSubmitInfo submitInfo{
+		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		.waitSemaphoreCount = 0,
+		.pWaitSemaphores = waitSemaphores,
+		.pWaitDstStageMask = waitStages,
+		.commandBufferCount = 1,
+		.pCommandBuffers = &depthPrePassCommandBuffer,
+		.signalSemaphoreCount = 1,
+		.pSignalSemaphores = &depthPrePassCompleteSemaphore
+	};
+
+	CHECK_VKRESULT(vkQueueSubmit(vulkanContext.graphicsQueue, 1, &submitInfo, depthPassFence));
+}
+
+void RenderingDevice::renderLighting() {
+	vkWaitForFences(vulkanContext.device, 1, &inFlightFences[frameIndex], VK_TRUE, UINT64_MAX);
+	vkResetFences(vulkanContext.device, 1, &inFlightFences[frameIndex]);
+
+	vkResetCommandBuffer(commandBuffers[frameIndex], 0);
+	buildRenderCommandBuffer();
+
+	VkSemaphore waitSemaphores[] = { clusterBuilder.getCompleteSemaphore(), presentCompleteSemaphores[frameIndex] };
+	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };	///< needs cluster data on fragment step
+	VkSubmitInfo submitInfo{
+		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		.waitSemaphoreCount = 2,
+		.pWaitSemaphores = waitSemaphores,
+		.pWaitDstStageMask = waitStages,
+		.commandBufferCount = 1,
+		.pCommandBuffers = &commandBuffers[frameIndex],
+		.signalSemaphoreCount = 1,
+		.pSignalSemaphores = &renderCompleteSemaphores[frameIndex]
+	};
+
+	CHECK_VKRESULT(vkQueueSubmit(vulkanContext.graphicsQueue, 1, &submitInfo, inFlightFences[frameIndex]));
+}
+
 RenderingDevice::~RenderingDevice() {
 	vkDeviceWaitIdle(vulkanContext.device);
 
@@ -671,12 +804,14 @@ RenderingDevice::~RenderingDevice() {
 	for (int i = 0; i < descriptorSetLayouts.size(); i++) {
 		vkDestroyDescriptorSetLayout(vulkanContext.device, descriptorSetLayouts[i], nullptr);
 	}
+	vkDestroyDescriptorSetLayout(vulkanContext.device, depthPassDescriptorSetLayout, nullptr);
 
 	for (size_t i = 0; i < MAX_FRAME_LAG; i++) {
 		vkDestroySemaphore(vulkanContext.device, presentCompleteSemaphores[i], nullptr);
 		vkDestroySemaphore(vulkanContext.device, renderCompleteSemaphores[i], nullptr);
 		vkDestroyFence(vulkanContext.device, inFlightFences[i], nullptr);
 	}
+	vkDestroySemaphore(vulkanContext.device, depthPrePassCompleteSemaphore, nullptr);
 
 	for (auto& shaderModule : shaderModules) {
 		vkDestroyShaderModule(vulkanContext.device, shaderModule, nullptr);
@@ -685,6 +820,9 @@ RenderingDevice::~RenderingDevice() {
 	vkDestroyCommandPool(vulkanContext.device, commandPool, nullptr);
 	vkDestroyPipeline(vulkanContext.device, renderPipeline, nullptr);
 	vkDestroyPipelineLayout(vulkanContext.device, pipelineLayout, nullptr);
+
+	vkDestroyPipeline(vulkanContext.device, depthPipeline, nullptr);
+	vkDestroyPipelineLayout(vulkanContext.device, depthPipelineLayout, nullptr);
 
 	clusterBuilder.destroy();
 
@@ -736,7 +874,7 @@ void RenderingDevice::createDescriptorSets() {
 
 	for (size_t i = 0; i < MAX_FRAME_LAG; i++) {
 		VkDescriptorBufferInfo globalsBufferInfo{
-			.buffer = uniformBuffers[i].getBuffer(),
+			.buffer = uniformBuffer->getBuffer(),
 			.offset = 0,
 			.range = sizeof(GlobalUniforms)
 		};
@@ -829,6 +967,92 @@ void RenderingDevice::createDescriptorSets() {
 
 		vkUpdateDescriptorSets(vulkanContext.device, writeDescriptorSets.size(), writeDescriptorSets.data(), 0, nullptr);
 	}
+
+	// Depth pre pass descriptor sets
+	{
+		VkDescriptorSetAllocateInfo allocateInfo{
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+			.descriptorPool = descriptorPool,
+			.descriptorSetCount = 1,
+			.pSetLayouts = &depthPassDescriptorSetLayout
+		};
+
+		CHECK_VKRESULT(vkAllocateDescriptorSets(vulkanContext.device, &allocateInfo, &depthPassDescriptorSet));
+
+		VkDescriptorBufferInfo globalsBufferInfo{
+			.buffer = uniformBuffer->getBuffer(),
+			.offset = 0,
+			.range = sizeof(GlobalUniforms)
+		};
+
+		VkWriteDescriptorSet writeDescriptorSet{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = depthPassDescriptorSet,
+			.dstBinding = 0,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.pBufferInfo = &globalsBufferInfo
+		};
+
+		vkUpdateDescriptorSets(vulkanContext.device, 1, &writeDescriptorSet, 0, nullptr);
+	}
+}
+
+void RenderingDevice::buildPrepassCommandBuffer() {
+	VkCommandBufferBeginInfo beginInfo{
+		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+		.pNext = nullptr,
+		.flags = 0,
+		.pInheritanceInfo = nullptr
+	};
+
+	std::array<VkClearValue, 1> clearValues{};
+	clearValues[0].depthStencil = {1.0f, 0};
+
+	VkRenderPassBeginInfo renderPassBeginInfo{
+		.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+		.renderPass = depthPrePass,
+		.framebuffer = depthPrePassTarget.getFramebuffer(0),
+		.renderArea = {
+				.offset = { 0, 0 },
+				.extent = {
+						.width = vulkanContext.swapChain.width,
+						.height = vulkanContext.swapChain.height } },
+		.clearValueCount = clearValues.size(),
+		.pClearValues = clearValues.data()
+	};
+
+	CHECK_VKRESULT(vkBeginCommandBuffer(depthPrePassCommandBuffer, &beginInfo));
+
+	vkCmdBeginRenderPass(depthPrePassCommandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+	// Update dynamic viewport state
+	VkViewport viewport{
+		.x = 0.f,
+		.y = (float)vulkanContext.swapChain.height,
+		.width = (float)vulkanContext.swapChain.width,
+		.height = -((float)vulkanContext.swapChain.height),
+		.minDepth = 0.f,
+		.maxDepth = 1.f,
+	};
+	vkCmdSetViewport(depthPrePassCommandBuffer, 0, 1, &viewport);
+
+	// Update dynamic scissor state
+	VkRect2D scissor{
+		.offset = { 0, 0 },
+		.extent = { vulkanContext.swapChain.width, vulkanContext.swapChain.height }
+	};
+	vkCmdSetScissor(depthPrePassCommandBuffer, 0, 1, &scissor);
+
+	vkCmdBindPipeline(depthPrePassCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, depthPipeline);
+
+	vkCmdBindDescriptorSets(depthPrePassCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, depthPipelineLayout, 0, 1, &depthPassDescriptorSet, 0, nullptr);
+
+	scene.draw(depthPrePassCommandBuffer, depthPipelineLayout, RenderFlag::None);
+
+	vkCmdEndRenderPass(depthPrePassCommandBuffer);
+	CHECK_VKRESULT(vkEndCommandBuffer(depthPrePassCommandBuffer));
 }
 
 }  // namespace vkw

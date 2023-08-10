@@ -361,28 +361,30 @@ void Model::updateNodeBounds(Node* node, glm::vec3& pmin, glm::vec3& pmax) {
 	}
 }
 
-void Model::draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t bindImageset) {
+void Model::draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t renderFlags, uint32_t bindImageset) {
 	const VkDeviceSize offsets[1] = { 0 };
 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer->getBuffer(), offsets);
 	vkCmdBindIndexBuffer(commandBuffer, indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
 
 	for (auto& node : nodes) {
-		drawNode(node, commandBuffer, pipelineLayout, bindImageset);
+		drawNode(node, commandBuffer, pipelineLayout, renderFlags, bindImageset);
 	}
 }
 
-void Model::drawNode(std::shared_ptr<Node> node, VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t bindImageset) {
+void Model::drawNode(std::shared_ptr<Node> node, VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout, uint32_t renderFlags, uint32_t bindImageset) {
 	if (node->mesh) {
 		vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(MeshPushConstants), &node->mesh->pushConstants);
 		for (auto primitive : node->mesh->primitives) {
-			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, bindImageset, 1, &primitive->material->descriptorSet, 0, nullptr);
+			if (renderFlags & RenderFlag::BindImages) {
+				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, bindImageset, 1, &primitive->material->descriptorSet, 0, nullptr);
+			}
 
 			vkCmdDrawIndexed(commandBuffer, primitive->indexCount, 1, primitive->firstIndex, 0, 0);
 		}
 	}
 
 	for (auto& child : node->children) {
-		drawNode(child, commandBuffer, pipelineLayout, bindImageset);
+		drawNode(child, commandBuffer, pipelineLayout, renderFlags, bindImageset);
 	}
 }
 

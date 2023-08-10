@@ -61,6 +61,13 @@ struct Vertex {
 	static std::array<VkVertexInputAttributeDescription, 4> getAttributeDescriptions(uint32_t binding);
 };
 
+enum RenderFlag {
+	None = 0x00000000,
+	BindImages = 0x00000001,
+	Opaque = 0x00000002,
+	AlphaMask = 0x00000004
+};
+
 class Model {
 public:
 	Model() {}
@@ -82,7 +89,7 @@ public:
 	void loadFromFile(const std::string& filepath, uint32_t postProcessFlags = 0);
 	void loadFromAiScene(const aiScene* scene, const std::string& filepath);
 
-	void draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout = VK_NULL_HANDLE, uint32_t bindImageset = 1);
+	void draw(VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout = VK_NULL_HANDLE, uint32_t renderFlags = 0, uint32_t bindImageset = 1);
 
 private:
 	void loadMaterials(const aiScene* scene);
@@ -93,7 +100,7 @@ private:
 	void updateModelBounds();
 	void updateNodeBounds(Node* node, glm::vec3& pmin, glm::vec3& pmax);
 
-	void drawNode(std::shared_ptr<Node> node, VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout = VK_NULL_HANDLE, uint32_t bindImageset = 1);
+	void drawNode(std::shared_ptr<Node> node, VkCommandBuffer commandBuffer, VkPipelineLayout pipelineLayout = VK_NULL_HANDLE, uint32_t renderFlags = 0, uint32_t bindImageset = 1);
 };
 
 }  // namespace bennu
