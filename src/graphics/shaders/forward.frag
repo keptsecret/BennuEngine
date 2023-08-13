@@ -120,7 +120,7 @@ void main() {
     }
 
     // Find cluster grid of fragment
-//    vec4 mod_FragCoord = gl_FragCoord;
+    //vec4 mod_FragCoord = gl_FragCoord;
     //mod_FragCoord.y = screenDims.y - mod_FragCoord.y;   // make FragCoord origin bottom-left corner
     uint zTile = uint(max(log2(linearDepth(alt_FragCoord.z)) * scale + bias, 0.0));
     uvec3 tile = uvec3(uvec2(alt_FragCoord.xy * vec2(screenDims) / tileSizes[3]), zTile);

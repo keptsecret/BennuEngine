@@ -28,7 +28,10 @@ void RenderingDevice::initialize() {
 	createCommandBuffers();
 	createSyncObjects();
 
-	uniformBuffer = std::make_unique<vkw::UniformBuffer>(sizeof(GlobalUniforms));
+	uniformBuffers.reserve(MAX_FRAME_LAG);
+	for (int i = 0; i < MAX_FRAME_LAG; i++) {
+		uniformBuffers.emplace_back(sizeof(GlobalUniforms));
+	}
 
 	createDescriptorPool();
 
@@ -371,8 +374,8 @@ void RenderingDevice::createCommandBuffers() {
 
 	CHECK_VKRESULT(vkAllocateCommandBuffers(vulkanContext.device, &allocateInfo, commandBuffers.data()));
 
-	allocateInfo.commandBufferCount = 1;
-	CHECK_VKRESULT(vkAllocateCommandBuffers(vulkanContext.device, &allocateInfo, &depthPrePassCommandBuffer));
+	depthPrePassCommandBuffers.resize(commandBufferCount);
+	CHECK_VKRESULT(vkAllocateCommandBuffers(vulkanContext.device, &allocateInfo, depthPrePassCommandBuffers.data()));
 }
 
 void RenderingDevice::buildRenderCommandBuffer() {
@@ -441,6 +444,8 @@ void RenderingDevice::createSyncObjects() {
 	presentCompleteSemaphores.resize(MAX_FRAME_LAG);
 	renderCompleteSemaphores.resize(MAX_FRAME_LAG);
 	inFlightFences.resize(MAX_FRAME_LAG);
+	depthPrePassCompleteSemaphores.resize(MAX_FRAME_LAG);
+	depthPassFences.resize(MAX_FRAME_LAG);
 
 	VkSemaphoreCreateInfo semaphoreCreateInfo{
 		.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
@@ -458,10 +463,11 @@ void RenderingDevice::createSyncObjects() {
 		CHECK_VKRESULT(vkCreateSemaphore(vulkanContext.device, &semaphoreCreateInfo, nullptr, &renderCompleteSemaphores[i]));
 
 		CHECK_VKRESULT(vkCreateFence(vulkanContext.device, &fenceCreateInfo, nullptr, &inFlightFences[i]));
-	}
 
-	CHECK_VKRESULT(vkCreateSemaphore(vulkanContext.device, &semaphoreCreateInfo, nullptr, &depthPrePassCompleteSemaphore));
-	CHECK_VKRESULT(vkCreateFence(vulkanContext.device, &fenceCreateInfo, nullptr, &depthPassFence));
+		CHECK_VKRESULT(vkCreateSemaphore(vulkanContext.device, &semaphoreCreateInfo, nullptr, &depthPrePassCompleteSemaphores[i]));
+
+		CHECK_VKRESULT(vkCreateFence(vulkanContext.device, &fenceCreateInfo, nullptr, &depthPassFences[i]));
+	}
 }
 
 VkResult RenderingDevice::createBuffer(VkBuffer* buffer, VkBufferUsageFlags usageFlags, VkDeviceMemory* memory, VkMemoryPropertyFlags memoryPropertyFlags, VkDeviceSize size, const void* data) {
@@ -595,7 +601,7 @@ void RenderingDevice::updateGlobalBuffers() {
 		.camNear = e->getCamera()->near_plane,
 		.camFar = e->getCamera()->far_plane
 	};
-	uniformBuffer->update(&ubo);
+	uniformBuffers[frameIndex].update(&ubo);
 
 	///< scene.updateSceneBufferData();
 }
@@ -712,6 +718,8 @@ void RenderingDevice::cleanupRenderArea() {
 }
 
 void RenderingDevice::render() {
+	updateGlobalBuffers();
+
 	VkResult err = vulkanContext.swapChain.acquireNextImage(presentCompleteSemaphores[frameIndex], &currentBuffer);
 	if (err == VK_ERROR_OUT_OF_DATE_KHR) {
 		updateRenderArea();
@@ -720,9 +728,8 @@ void RenderingDevice::render() {
 		CHECK_VKRESULT(err);
 	}
 
-	updateGlobalBuffers();
 	renderDepth();
-	clusterBuilder.computeClusterLights(depthPrePassCompleteSemaphore);
+	clusterBuilder.computeClusterLights(depthPrePassCompleteSemaphores[frameIndex]);
 	renderLighting();
 
 	VkPresentInfoKHR presentInfo{
@@ -748,26 +755,26 @@ void RenderingDevice::render() {
 }
 
 void RenderingDevice::renderDepth() {
-	vkWaitForFences(vulkanContext.device, 1, &depthPassFence, VK_TRUE, UINT64_MAX);
-	vkResetFences(vulkanContext.device, 1, &depthPassFence);
+	vkWaitForFences(vulkanContext.device, 1, &depthPassFences[frameIndex], VK_TRUE, UINT64_MAX);
+	vkResetFences(vulkanContext.device, 1, &depthPassFences[frameIndex]);
 
-	vkResetCommandBuffer(depthPrePassCommandBuffer, 0);
+	vkResetCommandBuffer(depthPrePassCommandBuffers[frameIndex], 0);
 	buildPrepassCommandBuffer();
 
 	VkSemaphore waitSemaphores[] = { presentCompleteSemaphores[frameIndex] };
 	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 	VkSubmitInfo submitInfo{
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-		.waitSemaphoreCount = 0,
+		.waitSemaphoreCount = 1,
 		.pWaitSemaphores = waitSemaphores,
 		.pWaitDstStageMask = waitStages,
 		.commandBufferCount = 1,
-		.pCommandBuffers = &depthPrePassCommandBuffer,
+		.pCommandBuffers = &depthPrePassCommandBuffers[frameIndex],
 		.signalSemaphoreCount = 1,
-		.pSignalSemaphores = &depthPrePassCompleteSemaphore
+		.pSignalSemaphores = &depthPrePassCompleteSemaphores[frameIndex]
 	};
 
-	CHECK_VKRESULT(vkQueueSubmit(vulkanContext.graphicsQueue, 1, &submitInfo, depthPassFence));
+	CHECK_VKRESULT(vkQueueSubmit(vulkanContext.graphicsQueue, 1, &submitInfo, depthPassFences[frameIndex]));
 }
 
 void RenderingDevice::renderLighting() {
@@ -777,11 +784,11 @@ void RenderingDevice::renderLighting() {
 	vkResetCommandBuffer(commandBuffers[frameIndex], 0);
 	buildRenderCommandBuffer();
 
-	VkSemaphore waitSemaphores[] = { clusterBuilder.getCompleteSemaphore(), presentCompleteSemaphores[frameIndex] };
+	VkSemaphore waitSemaphores[] = { clusterBuilder.getCompleteSemaphore() };
 	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };	///< needs cluster data on fragment step
 	VkSubmitInfo submitInfo{
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-		.waitSemaphoreCount = 2,
+		.waitSemaphoreCount = 1,
 		.pWaitSemaphores = waitSemaphores,
 		.pWaitDstStageMask = waitStages,
 		.commandBufferCount = 1,
@@ -809,9 +816,10 @@ RenderingDevice::~RenderingDevice() {
 	for (size_t i = 0; i < MAX_FRAME_LAG; i++) {
 		vkDestroySemaphore(vulkanContext.device, presentCompleteSemaphores[i], nullptr);
 		vkDestroySemaphore(vulkanContext.device, renderCompleteSemaphores[i], nullptr);
+		vkDestroySemaphore(vulkanContext.device, depthPrePassCompleteSemaphores[i], nullptr);
 		vkDestroyFence(vulkanContext.device, inFlightFences[i], nullptr);
+		vkDestroyFence(vulkanContext.device, depthPassFences[i], nullptr);
 	}
-	vkDestroySemaphore(vulkanContext.device, depthPrePassCompleteSemaphore, nullptr);
 
 	for (auto& shaderModule : shaderModules) {
 		vkDestroyShaderModule(vulkanContext.device, shaderModule, nullptr);
@@ -874,7 +882,7 @@ void RenderingDevice::createDescriptorSets() {
 
 	for (size_t i = 0; i < MAX_FRAME_LAG; i++) {
 		VkDescriptorBufferInfo globalsBufferInfo{
-			.buffer = uniformBuffer->getBuffer(),
+			.buffer = uniformBuffers[i].getBuffer(),
 			.offset = 0,
 			.range = sizeof(GlobalUniforms)
 		};
@@ -970,32 +978,36 @@ void RenderingDevice::createDescriptorSets() {
 
 	// Depth pre pass descriptor sets
 	{
+		std::vector<VkDescriptorSetLayout> depthLayouts(MAX_FRAME_LAG, depthPassDescriptorSetLayout);
 		VkDescriptorSetAllocateInfo allocateInfo{
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 			.descriptorPool = descriptorPool,
-			.descriptorSetCount = 1,
-			.pSetLayouts = &depthPassDescriptorSetLayout
+			.descriptorSetCount = MAX_FRAME_LAG,
+			.pSetLayouts = depthLayouts.data()
 		};
 
-		CHECK_VKRESULT(vkAllocateDescriptorSets(vulkanContext.device, &allocateInfo, &depthPassDescriptorSet));
+		depthPassDescriptorSets.resize(MAX_FRAME_LAG);
+		CHECK_VKRESULT(vkAllocateDescriptorSets(vulkanContext.device, &allocateInfo, depthPassDescriptorSets.data()));
 
-		VkDescriptorBufferInfo globalsBufferInfo{
-			.buffer = uniformBuffer->getBuffer(),
-			.offset = 0,
-			.range = sizeof(GlobalUniforms)
-		};
+		for (size_t i = 0; i < MAX_FRAME_LAG; i++) {
+			VkDescriptorBufferInfo globalsBufferInfo{
+				.buffer = uniformBuffers[i].getBuffer(),
+				.offset = 0,
+				.range = sizeof(GlobalUniforms)
+			};
 
-		VkWriteDescriptorSet writeDescriptorSet{
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = depthPassDescriptorSet,
-			.dstBinding = 0,
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-			.pBufferInfo = &globalsBufferInfo
-		};
+			VkWriteDescriptorSet writeDescriptorSet{
+				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+				.dstSet = depthPassDescriptorSets[i],
+				.dstBinding = 0,
+				.dstArrayElement = 0,
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.pBufferInfo = &globalsBufferInfo
+			};
 
-		vkUpdateDescriptorSets(vulkanContext.device, 1, &writeDescriptorSet, 0, nullptr);
+			vkUpdateDescriptorSets(vulkanContext.device, 1, &writeDescriptorSet, 0, nullptr);
+		}
 	}
 }
 
@@ -1023,9 +1035,9 @@ void RenderingDevice::buildPrepassCommandBuffer() {
 		.pClearValues = clearValues.data()
 	};
 
-	CHECK_VKRESULT(vkBeginCommandBuffer(depthPrePassCommandBuffer, &beginInfo));
+	CHECK_VKRESULT(vkBeginCommandBuffer(depthPrePassCommandBuffers[frameIndex], &beginInfo));
 
-	vkCmdBeginRenderPass(depthPrePassCommandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+	vkCmdBeginRenderPass(depthPrePassCommandBuffers[frameIndex], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 	// Update dynamic viewport state
 	VkViewport viewport{
@@ -1036,23 +1048,23 @@ void RenderingDevice::buildPrepassCommandBuffer() {
 		.minDepth = 0.f,
 		.maxDepth = 1.f,
 	};
-	vkCmdSetViewport(depthPrePassCommandBuffer, 0, 1, &viewport);
+	vkCmdSetViewport(depthPrePassCommandBuffers[frameIndex], 0, 1, &viewport);
 
 	// Update dynamic scissor state
 	VkRect2D scissor{
 		.offset = { 0, 0 },
 		.extent = { vulkanContext.swapChain.width, vulkanContext.swapChain.height }
 	};
-	vkCmdSetScissor(depthPrePassCommandBuffer, 0, 1, &scissor);
+	vkCmdSetScissor(depthPrePassCommandBuffers[frameIndex], 0, 1, &scissor);
 
-	vkCmdBindPipeline(depthPrePassCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, depthPipeline);
+	vkCmdBindPipeline(depthPrePassCommandBuffers[frameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, depthPipeline);
 
-	vkCmdBindDescriptorSets(depthPrePassCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, depthPipelineLayout, 0, 1, &depthPassDescriptorSet, 0, nullptr);
+	vkCmdBindDescriptorSets(depthPrePassCommandBuffers[frameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, depthPipelineLayout, 0, 1, &depthPassDescriptorSets[frameIndex], 0, nullptr);
 
-	scene.draw(depthPrePassCommandBuffer, depthPipelineLayout, RenderFlag::None);
+	scene.draw(depthPrePassCommandBuffers[frameIndex], depthPipelineLayout, RenderFlag::None);
 
-	vkCmdEndRenderPass(depthPrePassCommandBuffer);
-	CHECK_VKRESULT(vkEndCommandBuffer(depthPrePassCommandBuffer));
+	vkCmdEndRenderPass(depthPrePassCommandBuffers[frameIndex]);
+	CHECK_VKRESULT(vkEndCommandBuffer(depthPrePassCommandBuffers[frameIndex]));
 }
 
 }  // namespace vkw

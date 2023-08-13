@@ -86,7 +86,7 @@ private:
 	RenderTarget depthPrePassTarget;
 
 	// Main render pass
-	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
+	std::vector<VkDescriptorSetLayout> descriptorSetLayouts;	// scene buffers + material images
 	VkPipelineLayout pipelineLayout;
 	VkRenderPass renderPass;
 	VkPipeline renderPipeline;
@@ -99,23 +99,23 @@ private:
 
 	VkCommandPool commandPool;
 	std::vector<VkCommandBuffer> commandBuffers;
-	VkCommandBuffer depthPrePassCommandBuffer;
+	std::vector<VkCommandBuffer> depthPrePassCommandBuffers;
 	uint32_t frameIndex = 0;
 
 	std::vector<VkShaderModule> shaderModules;
 
 	uint32_t currentBuffer = 0;
-	VkSemaphore depthPrePassCompleteSemaphore;
-	VkFence depthPassFence;
+	std::vector<VkSemaphore> depthPrePassCompleteSemaphores;
+	std::vector<VkFence> depthPassFences;
 	std::vector<VkSemaphore> presentCompleteSemaphores;
 	std::vector<VkSemaphore> renderCompleteSemaphores;
 	std::vector<VkFence> inFlightFences;
 
-	std::unique_ptr<UniformBuffer> uniformBuffer;
+	std::vector<UniformBuffer> uniformBuffers;
 
 	VkDescriptorPool descriptorPool;
 	std::vector<VkDescriptorSet> descriptorSets;
-	VkDescriptorSet depthPassDescriptorSet;
+	std::vector<VkDescriptorSet> depthPassDescriptorSets;
 
 	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_8_BIT;
 
