@@ -110,24 +110,26 @@ set(BENNU_CORE_SOURCE
         )
 
 set(BENNU_GRAPHICS_HEADERS
-        src/graphics/renderingdevice.h
-        src/graphics/vulkancontext.h
-        src/graphics/swapchain.h
-        src/graphics/buffer.h
-        src/graphics/texture.h
-        src/graphics/rendertarget.h
-        src/graphics/utilities.h
+        src/graphics/vulkan/renderingdevice.h
+        src/graphics/vulkan/vulkancontext.h
+        src/graphics/vulkan/swapchain.h
+        src/graphics/vulkan/buffer.h
+        src/graphics/vulkan/texture.h
+        src/graphics/vulkan/rendertarget.h
+        src/graphics/vulkan/utilities.h
+
         src/graphics/clusterbuilder.h
         )
 
 set(BENNU_GRAPHICS_SOURCE
-        src/graphics/renderingdevice.cpp
-        src/graphics/vulkancontext.cpp
-        src/graphics/swapchain.cpp
-        src/graphics/buffer.cpp
-        src/graphics/texture.cpp
-        src/graphics/rendertarget.cpp
-        src/graphics/utilities.cpp
+        src/graphics/vulkan/renderingdevice.cpp
+        src/graphics/vulkan/vulkancontext.cpp
+        src/graphics/vulkan/swapchain.cpp
+        src/graphics/vulkan/buffer.cpp
+        src/graphics/vulkan/texture.cpp
+        src/graphics/vulkan/rendertarget.cpp
+        src/graphics/vulkan/utilities.cpp
+
         src/graphics/clusterbuilder.cpp
         )
 

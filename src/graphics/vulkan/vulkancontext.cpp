@@ -1,7 +1,8 @@
+#include <graphics/vulkan/vulkancontext.h>
+
 #include <core/engine.h>
 #include <glfw/glfw3.h>
-#include <graphics/utilities.h>
-#include <graphics/vulkancontext.h>
+#include <graphics/vulkan/utilities.h>
 
 #include <array>
 #include <iostream>

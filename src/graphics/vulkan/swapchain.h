@@ -2,11 +2,10 @@
 #define BENNU_SWAPCHAIN_H
 
 #include <vulkan/vulkan.h>
-#include <graphics/texture.h>
-
+#include <graphics/vulkan/texture.h>
 #include <glfw/glfw3.h>
-#include <vector>
 #include <memory>
+#include <vector>
 
 namespace bennu {
 

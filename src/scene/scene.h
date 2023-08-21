@@ -1,9 +1,10 @@
 #ifndef BENNU_SCENE_H
 #define BENNU_SCENE_H
 
-#include <scene/model.h>
+#include <graphics/vulkan/buffer.h>
+
 #include <scene/light.h>
-#include <graphics/buffer.h>
+#include <scene/model.h>
 
 namespace bennu {
 

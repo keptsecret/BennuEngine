@@ -1,12 +1,12 @@
 #ifndef BENNU_MODEL_H
 #define BENNU_MODEL_H
 
-#include <assimp/scene.h>
-#include <assimp/postprocess.h>
+#include <graphics/vulkan/buffer.h>
 
-#include <graphics/buffer.h>
-#include <scene/material.h>
+#include <assimp/postprocess.h>
+#include <assimp/scene.h>
 #include <core/math/aabb.h>
+#include <scene/material.h>
 
 namespace bennu {
 

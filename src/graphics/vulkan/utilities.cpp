@@ -1,4 +1,4 @@
-#include <graphics/utilities.h>
+#include <graphics/vulkan/utilities.h>
 
 namespace bennu {
 

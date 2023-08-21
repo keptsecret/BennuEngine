@@ -2,16 +2,13 @@
 #define BENNU_RENDERINGDEVICE_H
 
 #include <glfw/glfw3.h>
-#include <graphics/buffer.h>
-#include <graphics/rendertarget.h>
-#include <graphics/vulkancontext.h>
+#include <graphics/vulkan/buffer.h>
+#include <graphics/vulkan/rendertarget.h>
+#include <graphics/vulkan/vulkancontext.h>
 #include <graphics/clusterbuilder.h>
 #include <scene/scene.h>
 
 #include <array>
-#include <glm/glm.hpp>
-
-#include <scene/light.h>
 
 namespace bennu {
 

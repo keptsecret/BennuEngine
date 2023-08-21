@@ -1,8 +1,8 @@
 #ifndef BENNU_RENDERTARGET_H
 #define BENNU_RENDERTARGET_H
 
-#include <graphics/texture.h>
-#include <graphics/swapchain.h>
+#include <graphics/vulkan/texture.h>
+#include <graphics/vulkan/swapchain.h>
 
 #include <memory>
 
@@ -59,10 +59,6 @@ private:
 	VkExtent2D extent;
 
 	uint32_t numAttachments = 0;
-	// Unused, might need?
-//	std::vector<VkImage> colorRenderTargets;
-//	std::vector<VkImage> colorResolveTargets;
-//	VkImage depthStencilTarget;
 
 	std::vector<VkAttachmentReference> colorReferences;
 	std::vector<VkAttachmentReference> resolveReferences;

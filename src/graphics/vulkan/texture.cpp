@@ -1,6 +1,7 @@
-#include <graphics/renderingdevice.h>
-#include <graphics/texture.h>
-#include <graphics/utilities.h>
+#include <graphics/vulkan/texture.h>
+
+#include <graphics/vulkan/renderingdevice.h>
+#include <graphics/vulkan/utilities.h>
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
 

@@ -1,7 +1,8 @@
 #ifndef BENNU_VULKANCONTEXT_H
 #define BENNU_VULKANCONTEXT_H
 
-#include <graphics/swapchain.h>
+#include <graphics/vulkan/swapchain.h>
+
 #include <vulkan/vulkan.h>
 
 #include <string>

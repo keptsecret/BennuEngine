@@ -1,7 +1,7 @@
-#include <graphics/buffer.h>
+#include <graphics/vulkan/buffer.h>
 
-#include <graphics/renderingdevice.h>
-#include <graphics/utilities.h>
+#include <graphics/vulkan/renderingdevice.h>
+#include <graphics/vulkan/utilities.h>
 
 namespace bennu {
 

@@ -1,9 +1,10 @@
 #include <scene/model.h>
 
-#include <graphics/utilities.h>
-#include <graphics/renderingdevice.h>
-#include <assimp/Importer.hpp>
+#include <graphics/vulkan/renderingdevice.h>
+#include <graphics/vulkan/utilities.h>
+
 #include <array>
+#include <assimp/Importer.hpp>
 #include <iostream>
 
 #ifndef GLM_FORCE_RADIANS

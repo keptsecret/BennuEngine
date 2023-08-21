@@ -1,10 +1,10 @@
 #ifndef BENNU_MATERIAL_H
 #define BENNU_MATERIAL_H
 
-#include <graphics/buffer.h>
-#include <graphics/texture.h>
-#include <glm/gtc/type_ptr.hpp>
+#include <graphics/vulkan/buffer.h>
+#include <graphics/vulkan/texture.h>
 
+#include <glm/gtc/type_ptr.hpp>
 #include <memory>
 
 namespace bennu {

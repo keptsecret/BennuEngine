@@ -1,8 +1,8 @@
-#include <graphics/renderingdevice.h>
+#include <graphics/vulkan/renderingdevice.h>
 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 
-#include <graphics/utilities.h>
+#include <graphics/vulkan/utilities.h>
 #include <core/engine.h>
 
 namespace bennu {

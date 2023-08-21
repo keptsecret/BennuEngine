@@ -1,6 +1,6 @@
-#include <core/engine.h>
+#include <graphics/vulkan/renderingdevice.h>
 
-#include <graphics/renderingdevice.h>
+#include <core/engine.h>
 
 namespace bennu {
 

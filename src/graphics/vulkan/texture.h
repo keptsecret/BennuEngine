@@ -2,8 +2,8 @@
 #define BENNU_TEXTURE_H
 
 #include <vulkan/vulkan.h>
-
 #include <glm/glm.hpp>
+
 #include <string>
 #include <vector>
 
