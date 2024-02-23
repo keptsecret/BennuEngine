@@ -118,7 +118,10 @@ set(BENNU_GRAPHICS_HEADERS
         src/graphics/vulkan/rendertarget.h
         src/graphics/vulkan/utilities.h
 
+        src/graphics/rendersystem.h
         src/graphics/clusterbuilder.h
+        src/graphics/depthrenderer.h
+        src/graphics/forwardrenderer.h
         )
 
 set(BENNU_GRAPHICS_SOURCE
@@ -130,7 +133,10 @@ set(BENNU_GRAPHICS_SOURCE
         src/graphics/vulkan/rendertarget.cpp
         src/graphics/vulkan/utilities.cpp
 
+        src/graphics/rendersystem.cpp
         src/graphics/clusterbuilder.cpp
+        src/graphics/depthrenderer.cpp
+        src/graphics/forwardrenderer.cpp
         )
 
 set(BENNU_SCENE_HEADERS

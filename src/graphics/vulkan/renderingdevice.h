@@ -2,6 +2,8 @@
 #define BENNU_RENDERINGDEVICE_H
 
 #include <glfw/glfw3.h>
+#include <vulkan/vulkan.h>
+
 #include <graphics/vulkan/buffer.h>
 #include <graphics/vulkan/rendertarget.h>
 #include <graphics/vulkan/vulkancontext.h>
@@ -35,16 +37,24 @@ public:
 
 	const VkQueue& getGraphicsQueue() const { return vulkanContext.graphicsQueue; }
 	const VkQueue& getComputeQueue() const { return vulkanContext.computeQueue; }
+	const Swapchain& getSwapChain() const { return vulkanContext.swapChain; }
 
 	const VkDescriptorPool& getDescriptorPool() const { return descriptorPool; }
 	const VkDescriptorSetLayout& getDescriptorSetLayout(int index) const { return descriptorSetLayouts[index]; }
 
 	const VkCommandPool& getCommandPool() const { return commandPool; }
+	VkSampleCountFlagBits getMSAASamples() const { return msaaSamples; }
 
 	VkResult createBuffer(VkBuffer* buffer, VkBufferUsageFlags usageFlags, VkDeviceMemory* memory, VkMemoryPropertyFlags memoryPropertyFlags, VkDeviceSize size, const void* data = nullptr);
 	VkResult createCommandBuffer(VkCommandBuffer* buffer, VkCommandBufferLevel level, bool begin);
 	void commandBufferSubmitIdle(VkCommandBuffer* buffer, VkQueueFlagBits queueType);
 	uint32_t getMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+
+	VkPipelineShaderStageCreateInfo loadSPIRVShader(const std::string& filename, VkShaderStageFlagBits stage,
+			std::vector<VkShaderModule>* shaderModules);
+
+	void deviceWaitIdle() const { vkDeviceWaitIdle(vulkanContext.device); }
+	void updateSwapchain(uint32_t* width, uint32_t* height);
 
 private:
 	void setupDescriptorSetLayouts();
@@ -63,8 +73,6 @@ private:
 	void updateRenderArea();
 	void setupRenderPasses();
 	void cleanupRenderArea();
-
-	VkPipelineShaderStageCreateInfo loadSPIRVShader(const std::string& filename, VkShaderStageFlagBits stage);
 
 	void createDescriptorPool();
 	void createDescriptorSets();

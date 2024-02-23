@@ -175,8 +175,8 @@ void RenderingDevice::setupDescriptorSetLayouts() {
 
 void RenderingDevice::createRenderPipelines() {
 	VkPipelineShaderStageCreateInfo shaderStages[] = {
-		loadSPIRVShader("../src/graphics/shaders/forward.vert.spv", VK_SHADER_STAGE_VERTEX_BIT),
-		loadSPIRVShader("../src/graphics/shaders/forward.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT)
+		loadSPIRVShader("../src/graphics/shaders/forward.vert.spv", VK_SHADER_STAGE_VERTEX_BIT, &shaderModules),
+		loadSPIRVShader("../src/graphics/shaders/forward.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT, &shaderModules)
 	};
 
 	std::vector<VkDynamicState> dynamicStates = {
@@ -299,7 +299,7 @@ void RenderingDevice::createRenderPipelines() {
 	// Depth prepass pipeline
 	{
 		VkPipelineShaderStageCreateInfo prepassShaderStages[] = {
-			loadSPIRVShader("../src/graphics/shaders/depth.vert.spv", VK_SHADER_STAGE_VERTEX_BIT)
+			loadSPIRVShader("../src/graphics/shaders/depth.vert.spv", VK_SHADER_STAGE_VERTEX_BIT, &shaderModules)
 		};
 
 		VkPipelineDepthStencilStateCreateInfo prepassDepthStencilState{
@@ -573,7 +573,7 @@ void RenderingDevice::commandBufferSubmitIdle(VkCommandBuffer* buffer, VkQueueFl
 	vkFreeCommandBuffers(vulkanContext.device, commandPool, 1, buffer);
 }
 
-VkPipelineShaderStageCreateInfo RenderingDevice::loadSPIRVShader(const std::string& filename, VkShaderStageFlagBits stage) {
+VkPipelineShaderStageCreateInfo RenderingDevice::loadSPIRVShader(const std::string& filename, VkShaderStageFlagBits stage, std::vector<VkShaderModule>* shaderModules) {
 	VkPipelineShaderStageCreateInfo shaderStageInfo{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 		.stage = stage,
@@ -581,7 +581,7 @@ VkPipelineShaderStageCreateInfo RenderingDevice::loadSPIRVShader(const std::stri
 		.pName = "main"
 	};
 
-	shaderModules.push_back(shaderStageInfo.module);
+	shaderModules->push_back(shaderStageInfo.module);
 
 	return shaderStageInfo;
 }
@@ -1065,6 +1065,12 @@ void RenderingDevice::buildPrepassCommandBuffer() {
 
 	vkCmdEndRenderPass(depthPrePassCommandBuffers[frameIndex]);
 	CHECK_VKRESULT(vkEndCommandBuffer(depthPrePassCommandBuffers[frameIndex]));
+}
+
+void RenderingDevice::updateSwapchain(uint32_t* width, uint32_t* height) {
+	vulkanContext.updateSwapchain(window);
+	*width = vulkanContext.swapChain.width;
+	*height = vulkanContext.swapChain.height;
 }
 
 }  // namespace vkw

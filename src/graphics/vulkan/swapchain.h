@@ -23,6 +23,7 @@ public:
 	VkResult acquireNextImage(VkSemaphore presentCompleteSemaphore, uint32_t* imageIndex);
 	void cleanup();
 
+	uint32_t getImageCount() const { return imageCount; }
 	VkFormat getFormat() const { return colorFormat; }
 	const VkImageView& getImageView(int index) const { return swapchainImageViews[index]; }
 
